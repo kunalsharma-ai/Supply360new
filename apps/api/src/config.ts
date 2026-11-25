@@ -16,6 +16,7 @@ const Env = z.object({
   WEB_ORIGIN: z.string().url().default('http://localhost:3000'),
   /** Sign-in and MFA attempts per minute per client address. */
   LOGIN_RATE_LIMIT: z.coerce.number().int().min(1).max(10_000).default(10),
+  API_RATE_LIMIT: z.coerce.number().int().min(1).max(10_000_000).default(300),
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(24).default(12),
   COOKIE_SECURE: z
     .enum(['true', 'false'])
