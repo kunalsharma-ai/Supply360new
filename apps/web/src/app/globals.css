@@ -1,0 +1,137 @@
+@import 'tailwindcss';
+
+/*
+ * Supply360 design tokens. Four themes share one set of semantic tokens; components only use the semantic names.
+ * Contrast: text on surface and text-muted on surface are ≥ 4.5:1 in every theme (checked in tokens.test.ts).
+ */
+@custom-variant dark (&:where([data-mode='dark'], [data-mode='dark'] *));
+
+:root,
+[data-theme='midnight'] {
+  --bg: #070d1a;
+  --surface: #0c1527;
+  --surface-2: #111d35;
+  --surface-3: #18284a;
+  --border: #1f3257;
+  --text: #e6eefc;
+  --text-muted: #94a7c9;
+  --accent: #22d3ee;
+  --accent-strong: #06b6d4;
+  --accent-contrast: #04222a;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --info: #60a5fa;
+  --ring: #22d3ee;
+  --glow: 0 0 0 1px rgb(34 211 238 / 0.15), 0 8px 32px -8px rgb(34 211 238 / 0.25);
+  color-scheme: dark;
+}
+[data-theme='arctic'] {
+  --bg: #f4f7fb;
+  --surface: #ffffff;
+  --surface-2: #eef2f8;
+  --surface-3: #e2e8f2;
+  --border: #d5deeb;
+  --text: #0e1a2b;
+  --text-muted: #4a5b74;
+  --accent: #1a52bd;
+  --accent-strong: #143f94;
+  --accent-contrast: #ffffff;
+  --success: #0a6b49;
+  --warning: #854700;
+  --danger: #a82020;
+  --info: #1a52bd;
+  --ring: #1a52bd;
+  --glow: 0 1px 2px rgb(14 26 43 / 0.06), 0 8px 24px -12px rgb(14 26 43 / 0.18);
+  color-scheme: light;
+}
+[data-theme='violet'] {
+  --bg: #0c0716;
+  --surface: #140c24;
+  --surface-2: #1c1233;
+  --surface-3: #271a45;
+  --border: #33235a;
+  --text: #efe9fc;
+  --text-muted: #a99cc8;
+  --accent: #a78bfa;
+  --accent-strong: #8b5cf6;
+  --accent-contrast: #1a0f33;
+  --success: #4ade80;
+  --warning: #facc15;
+  --danger: #fb7185;
+  --info: #818cf8;
+  --ring: #a78bfa;
+  --glow: 0 0 0 1px rgb(167 139 250 / 0.18), 0 8px 32px -8px rgb(139 92 246 / 0.35);
+  color-scheme: dark;
+}
+[data-theme='emerald'] {
+  --bg: #04120f;
+  --surface: #071c17;
+  --surface-2: #0b2620;
+  --surface-3: #10352c;
+  --border: #174437;
+  --text: #e3f7f0;
+  --text-muted: #8fb8aa;
+  --accent: #2dd4bf;
+  --accent-strong: #14b8a6;
+  --accent-contrast: #022420;
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --info: #38bdf8;
+  --ring: #2dd4bf;
+  --glow: 0 0 0 1px rgb(45 212 191 / 0.15), 0 8px 32px -8px rgb(20 184 166 / 0.3);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+  --color-ring: var(--ring);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --shadow-glow: var(--glow);
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+body {
+  font-feature-settings: 'cv11', 'ss01', 'tnum';
+  -webkit-font-smoothing: antialiased;
+}
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+::selection {
+  background: color-mix(in oklab, var(--accent) 35%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+.bg-grid {
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--border) 45%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--border) 45%, transparent) 1px, transparent 1px);
+  background-size: 32px 32px;
+}

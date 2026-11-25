@@ -1,0 +1,25 @@
+{
+  "name": "supply360",
+  "private": true,
+  "description": "Supply360: human sample supply and fieldwork automation for the Sampledge ecosystem",
+  "packageManager": "pnpm@12.23.0",
+  "engines": {
+    "node": ">=26.13.1 <27"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:integration": "turbo run test:integration",
+    "dev": "turbo run dev --parallel",
+    "db:migrate": "pnpm --filter @s360/db migrate",
+    "db:seed:demo": "pnpm --filter @s360/api seed:demo",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "prettier": "3.10.1",
+    "turbo": "2.11.13",
+    "typescript": "7.0.2"
+  }
+}
