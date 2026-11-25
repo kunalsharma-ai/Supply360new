@@ -1,0 +1,61 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 20
+    env:
+      TEST_PG_ADMIN_URL: postgres://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - run: npm i -g pnpm@12.23.0
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm test:integration
+      - name: Browser end-to-end on a fresh stack
+        env:
+          DATABASE_ADMIN_URL: postgres://postgres:postgres@localhost:5432/supply360
+          DATABASE_URL: postgres://s360_api:ci-api-password@localhost:5432/supply360
+          S360_DEMO_PASSWORD: ci-demo-password-2026
+          NODE_ENV: development
+        run: |
+          psql postgres://postgres:postgres@localhost:5432/postgres -c "create database supply360" -c "create role s360_api login password 'ci-api-password'"
+          pnpm db:migrate
+          psql "$DATABASE_ADMIN_URL" -c "grant s360_app to s360_api"
+          pnpm --filter @s360/api seed:demo
+          export SESSION_SECRET=$(openssl rand -hex 32) FIELD_ENCRYPTION_KEY=$(openssl rand -base64 32)
+          (cd apps/api && node dist/main.js &)
+          cp -r apps/web/.next/static apps/web/.next/standalone/apps/web/.next/static
+          (cd apps/web && S360_API_URL=http://localhost:4000 node .next/standalone/apps/web/server.js &)
+          npx -y wait-on@9.5.1 http://localhost:4000/api/v1/health http://localhost:3000/login
+          pnpm --filter @s360/web exec playwright install --with-deps chromium
+          E2E_PASSWORD=$S360_DEMO_PASSWORD pnpm --filter @s360/web e2e
+
+  images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build API and web images
+        env:
+          POSTGRES_PASSWORD: ci
+          S360_API_DB_PASSWORD: ci
+        run: docker compose --profile app build api web

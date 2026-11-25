@@ -1,0 +1,54 @@
+# Local stack. `docker compose up -d postgres redis` for development, or `docker compose up --build` for everything.
+# Temporal and an OIDC provider join in the phases that first use them (ADR-003, ADR-010).
+name: supply360
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: supply360
+    ports: ['5432:5432']
+    volumes: ['pgdata:/var/lib/postgresql']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d supply360']
+      interval: 5s
+      retries: 20
+
+  redis:
+    image: redis:8
+    ports: ['6379:6379']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+
+  migrate:
+    build: { context: ., dockerfile: apps/api/Dockerfile }
+    command: ['node', 'packages/db/dist/migrate.js']
+    environment:
+      DATABASE_ADMIN_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/supply360
+    depends_on: { postgres: { condition: service_healthy } }
+    profiles: ['app']
+
+  api:
+    build: { context: ., dockerfile: apps/api/Dockerfile }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://s360_api:${S360_API_DB_PASSWORD:?set S360_API_DB_PASSWORD}@postgres:5432/supply360
+      DATABASE_ADMIN_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/supply360
+    ports: ['4000:4000']
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    profiles: ['app']
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args: { S360_API_URL: 'http://api:4000' }
+    ports: ['3000:3000']
+    depends_on: [api]
+    profiles: ['app']
+
+volumes:
+  pgdata:
