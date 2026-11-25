@@ -74,3 +74,19 @@ docs/phase0         Audit, integration capability matrix, ADRs, threat model, pl
 Pinned exactly, latest stable as of 2026-11-25, no prereleases. See ADR-002 in
 [`docs/phase0/03-architecture-and-adrs.md`](docs/phase0/03-architecture-and-adrs.md). Prisma was not used because its
 `latest` tag is a release candidate.
+
+## Load test
+
+`apps/api/src/scripts/load-test.ts` creates a throwaway `loadtest-*` tenant with 20 Tenant Admin accounts, signs
+them all in with MFA, then runs a weighted read/write mix (40% `/auth/me`, 20% `/users`, 20% `/audit`, 15%
+`/notifications`, 5% `PUT /settings/tenant`) at several concurrency levels and prints throughput, errors, status
+codes and p50/p95/p99 latency. It refuses to run with `NODE_ENV=production`.
+
+```sh
+# The API's per-address limits would (correctly) reject a single-machine load run, so raise them for this run only.
+LOGIN_RATE_LIMIT=1000 API_RATE_LIMIT=10000000 pnpm --filter @s360/api start
+DATABASE_ADMIN_URL=postgres://postgres:postgres@localhost:5432/supply360 \
+  pnpm --filter @s360/api load-test -- --levels 10,50,100 --duration 15
+```
+
+Flags: `--base`, `--users`, `--levels`, `--duration`, `--json`.

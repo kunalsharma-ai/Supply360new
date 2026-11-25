@@ -23,7 +23,7 @@ export class AppModule {
       module: AppModule,
       global: true,
       imports: [
-        ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: env.NODE_ENV === 'test' ? 10_000 : 300 }]),
+        ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: env.NODE_ENV === 'test' ? 10_000 : env.API_RATE_LIMIT }]),
         { module: DbModule, providers: [{ provide: ENV, useValue: env }], exports: [ENV] },
       ],
       providers: [

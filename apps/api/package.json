@@ -11,7 +11,8 @@
     "test": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
     "tenant:create": "node --env-file-if-exists=../../.env dist/scripts/create-tenant.js",
-    "seed:demo": "node --env-file-if-exists=../../.env dist/scripts/seed-demo.js"
+    "seed:demo": "node --env-file-if-exists=../../.env dist/scripts/seed-demo.js",
+    "load-test": "node --env-file-if-exists=../../.env dist/scripts/load-test.js"
   },
   "dependencies": {
     "@nestjs/common": "12.6.2",
