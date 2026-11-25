@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { Empty, Loading } from '@/components/ui/states';
 import { api } from '@/lib/api';
+import { lifecycleLabel, lifecycleTone, sourceTone, type Connection, type ProjectSummary } from '@/lib/ingestion';
 import { MODULES } from '@/lib/modules';
 
 function Stat({ label, value, hint, icon: Icon }: { label: string; value: string; hint: string; icon: typeof Users }) {
@@ -24,15 +25,32 @@ function Stat({ label, value, hint, icon: Icon }: { label: string; value: string
   );
 }
 
+type Tone = 'neutral' | 'warning' | 'success' | 'demo' | 'danger';
+
+function sampTrekHealth(
+  conns: Connection[] | undefined,
+  allowed: boolean,
+): { state: string; tone: Tone; note: string } {
+  if (!allowed) return { state: 'Hidden', tone: 'neutral', note: 'Your role cannot see integration details.' };
+  if (!conns) return { state: '…', tone: 'neutral', note: 'Checking' };
+  const on = conns.filter((c) => c.enabled);
+  if (!on.length)
+    return { state: 'Not connected', tone: 'neutral', note: 'Add a SampTrek connection to import projects.' };
+  const failing = on.find((c) => c.lastSyncResult && !c.lastSyncResult.ok);
+  if (failing)
+    return { state: 'Sync problem', tone: 'danger', note: failing.lastSyncResult!.errors[0] ?? 'The last sync failed' };
+  const live = on.some((c) => c.mode === 'live');
+  const rejected = on.reduce((a, c) => a + c.rejectedCount, 0);
+  return {
+    state: live ? 'Connected' : 'FIXTURE',
+    tone: live ? 'success' : 'demo',
+    note: `${live ? 'Reading the live SampTrek API' : 'Labelled sample projects, shaped like SampTrek'}; signed webhooks on.${
+      rejected ? ` ${rejected} deliveries refused for a bad signature.` : ''
+    }`,
+  };
+}
+
 const INTEGRATIONS = [
-  {
-    name: 'SampTrek',
-    icon: Network,
-    state: 'Not connected',
-    tone: 'neutral' as const,
-    note: 'Project import arrives in Phase 2. Uses SampTrek’s public API, signed webhooks and vendor callbacks.',
-    href: '/integrations/samptrek',
-  },
   {
     name: 'MADP',
     icon: Database,
@@ -65,6 +83,31 @@ export default function CommandCentre() {
     queryFn: () => api<{ items: AuditEvent[] }>('/audit?limit=8'),
     enabled: canAudit,
   });
+  const canProjects = useCan('projects.read');
+  const canSources = useCan('integrations.read');
+  const projects = useQuery({
+    queryKey: ['projects', '', ''],
+    queryFn: () => api<{ items: ProjectSummary[] }>('/projects'),
+    enabled: canProjects,
+  });
+  const sources = useQuery({
+    queryKey: ['sources'],
+    queryFn: () => api<{ items: Connection[] }>('/sources'),
+    enabled: canSources,
+  });
+  const st = sampTrekHealth(sources.data?.items, canSources);
+  const integrations = [
+    {
+      name: 'SampTrek',
+      icon: Network,
+      ...st,
+      href: '/integrations/samptrek',
+    },
+    ...INTEGRATIONS,
+  ];
+  const items = projects.data?.items ?? [];
+  const live = items.filter((p) => p.lifecycle === 'live').length;
+  const dispatching = items.filter((p) => p.dispatchAllowed).length;
   const ready = MODULES.filter((m) => m.ready).length;
   const mfa = users.data ? users.data.items.filter((u) => u.mfaEnabled).length : null;
 
@@ -73,10 +116,19 @@ export default function CommandCentre() {
       <PageHeader
         eyebrow={<Badge tone="accent">Global Command Centre</Badge>}
         title={`Good to see you, ${me.user.name.split(' ')[0]}`}
-        description="Everything here comes from this workspace’s own records. Fieldwork figures appear once SampTrek and MADP are connected; nothing on this page is simulated."
+        description="Everything here comes from this workspace’s own records. Fieldwork figures appear as SampTrek and MADP data arrives; FIXTURE data is always labelled."
       />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat label="Active projects" value="0" hint="No project source connected yet" icon={Network} />
+        <Stat
+          label="Live projects"
+          value={projects.data ? String(live) : canProjects ? '…' : '—'}
+          hint={
+            projects.data
+              ? `${items.length} imported, ${dispatching} allowed to dispatch`
+              : 'Projects come from SampTrek'
+          }
+          icon={Network}
+        />
         <Stat
           label="People in this workspace"
           value={users.data ? String(users.data.items.length) : canUsers ? '…' : '—'}
@@ -106,7 +158,7 @@ export default function CommandCentre() {
             description="Live state of every source system. Supply360 never shows data from a source it cannot verify."
           />
           <ul className="divide-y divide-border">
-            {INTEGRATIONS.map((i) => (
+            {integrations.map((i) => (
               <li key={i.name} className="flex items-start gap-4 px-5 py-4">
                 <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-surface-2">
                   <i.icon className="size-4 text-muted" />
@@ -159,13 +211,45 @@ export default function CommandCentre() {
       </div>
 
       <Card className="mt-6">
-        <CardHeader title="Projects" description="Imported from SampTrek once the integration is connected" />
-        <CardBody>
-          <Empty title="No projects yet">
-            Supply360 imports projects from SampTrek automatically; it never creates them by hand. The SampTrek
-            integration arrives in Phase 2.
-          </Empty>
-        </CardBody>
+        <CardHeader
+          title="Projects"
+          description="Imported from SampTrek. Supply360 never creates projects by hand."
+          action={
+            canProjects && (
+              <Link href="/projects" className="text-xs text-accent hover:underline">
+                All projects
+              </Link>
+            )
+          }
+        />
+        {!canProjects ? (
+          <Empty title="Projects are not available for your role" />
+        ) : projects.isLoading ? (
+          <Loading />
+        ) : items.length ? (
+          <ul className="divide-y divide-border">
+            {items.slice(0, 6).map((p) => (
+              <li key={p.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
+                <div className="min-w-0 flex-1">
+                  <Link href={`/projects/${p.id}`} className="text-sm font-medium hover:text-accent">
+                    {p.name}
+                  </Link>
+                  <p className="font-mono text-xs text-muted">
+                    {p.projectCode} · {p.markets?.join(' ')}
+                  </p>
+                </div>
+                <Badge tone={sourceTone(p.sourceStatus)}>SampTrek {p.sourceStatus}</Badge>
+                <Badge tone={lifecycleTone(p.lifecycle)}>{lifecycleLabel(p.lifecycle)}</Badge>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <CardBody>
+            <Empty title="No projects yet">
+              Connect SampTrek and run a backfill. FIXTURE mode loads labelled sample projects.
+            </Empty>
+          </CardBody>
+        )}
       </Card>
     </>
   );

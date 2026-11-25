@@ -13,6 +13,8 @@ export async function createApp(env: Env): Promise<NestExpressApplication> {
   limits.login = env.LOGIN_RATE_LIMIT;
   const app = await NestFactory.create<NestExpressApplication>(AppModule.forRoot(env), {
     logger: env.NODE_ENV === 'test' ? ['error'] : ['log', 'warn', 'error'],
+    // Webhook signatures are checked against the exact bytes received (req.rawBody).
+    rawBody: true,
   });
   app.set('trust proxy', env.NODE_ENV === 'production' ? 1 : false);
   app.disable('x-powered-by');

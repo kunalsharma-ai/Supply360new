@@ -25,6 +25,9 @@ export interface ModuleDef {
   summary: string;
 }
 
+/** The last delivered phase. Phases up to and including it show as done on the status pages. */
+export const CURRENT_PHASE = 2;
+
 export const MODULES: ModuleDef[] = [
   {
     n: 1,
@@ -55,6 +58,7 @@ export const MODULES: ModuleDef[] = [
     group: 'Integrations',
     href: '/integrations/samptrek',
     phase: 2,
+    ready: true,
     permission: 'integrations.read',
     summary: 'Project import by signed webhooks and polling; vendor-link outcomes.',
   },
@@ -85,6 +89,7 @@ export const MODULES: ModuleDef[] = [
     group: 'Projects',
     href: '/projects',
     phase: 2,
+    ready: true,
     permission: 'projects.read',
     summary: 'Projects, lifecycle states and the execution toolbar.',
   },
@@ -215,6 +220,7 @@ export const MODULES: ModuleDef[] = [
     group: 'Fieldwork',
     href: '/redirects',
     phase: 2,
+    ready: true,
     permission: 'projects.read',
     summary: 'Allowlisted redirect endpoints for every outcome.',
   },
@@ -336,6 +342,7 @@ export const MODULES: ModuleDef[] = [
     group: 'Platform',
     href: '/developers',
     phase: 2,
+    ready: true,
     permission: 'integrations.manage',
     summary: 'Service credentials, signed webhooks and replay.',
   },

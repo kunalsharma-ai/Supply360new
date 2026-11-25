@@ -1,5 +1,8 @@
 import { Controller, Get } from '@nestjs/common';
 import {
+  EntryLinkApproval,
+  LifecycleRequest,
+  SourceConnectionCreate,
   LoginRequest,
   LoginResponse,
   Me,
@@ -53,6 +56,41 @@ export function buildOpenApi() {
       },
       '/notifications': { get: op('Notifications for me and my tenant', 'notifications.read') },
       '/notifications/{id}/read': { post: op('Mark read', 'notifications.read') },
+      '/sources': {
+        get: op('Project source connections (SampTrek)', 'integrations.read'),
+        post: op('Add a connection; returns the webhook secret once', 'integrations.manage', SourceConnectionCreate),
+      },
+      '/sources/{id}': { patch: op('Turn a connection on or off', 'integrations.manage') },
+      '/sources/{id}/sync': {
+        post: op('Poll changed projects, or backfill with {"full":true}', 'integrations.manage'),
+      },
+      '/sources/{id}/rotate-secret': { post: op('New webhook secret, returned once', 'integrations.manage') },
+      '/sources/{id}/fixture/status': {
+        post: op('FIXTURE only: simulate a SampTrek status change', 'integrations.manage'),
+      },
+      '/sources/events': { get: op('Webhook inbox, newest first (?cursor)', 'integrations.read') },
+      '/sources/events/{id}/retry': { post: op('Retry a failed inbox event', 'integrations.manage') },
+      '/webhooks/samptrek/{tenant}/{connection}': {
+        post: { ...op('SampTrek event webhook, verified by X-Projexa-Signature', 'HMAC signature'), security: [] },
+      },
+      '/projects': { get: op('Projects (?lifecycle, ?q)', 'projects.read') },
+      '/projects/{id}': {
+        get: op('Project with markets, launch checks, allowed actions and redirect URLs', 'projects.read'),
+      },
+      '/projects/{id}/versions': { get: op('Content versions received from the source', 'projects.read') },
+      '/projects/{id}/lifecycle': {
+        post: op(
+          'Move through the lifecycle (permission depends on the action)',
+          'projects.read + action permission',
+          LifecycleRequest,
+        ),
+      },
+      '/projects/{id}/markets/{cc}/entry-link': {
+        put: op("Approve Supply360's SampTrek entry link for a market", 'projects.manage', EntryLinkApproval),
+      },
+      '/r/{tenant}/{project}/{outcome}': {
+        get: { ...op('Respondent redirect landing (302 to the Supply360 thank-you page)', null), security: [] },
+      },
     },
   };
 }

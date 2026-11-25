@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { parseArgs } from 'node:util';
 import { Secret, TOTP } from 'otpauth';
+import { signSampTrek } from '../ingestion/signature.js';
 import { provisionTenant } from './provision.js';
 
 /**
@@ -64,11 +65,45 @@ interface Op {
   weight: number;
   run: (cookie: string) => Promise<Response>;
 }
+// Filled in by the Phase 2 setup below: a FIXTURE SampTrek connection and its imported projects.
+const source = {
+  webhookUrl: '',
+  secret: '',
+  projectIds: [] as string[],
+  sourceIds: ['fx-prj-10001', 'fx-prj-10002', 'fx-prj-10003'],
+};
+const any = <T>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)]!;
+let eventSeq = 0;
+/** Signed project.status_changed with the project's current status; every second one repeats an earlier event id. */
+function webhook(): Promise<Response> {
+  const n = eventSeq++;
+  const id = `evt_load_${slug}_${n % 2 ? n - 1 : n}`;
+  const st = ['LIVE', 'TEST', 'HOLD'][n % 3]!;
+  const body = JSON.stringify({
+    id,
+    event: 'project.status_changed',
+    createdAt: new Date().toISOString(),
+    data: { project: { id: source.sourceIds[n % 3] }, from: st, to: st },
+  });
+  return fetch(source.webhookUrl, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...signSampTrek(source.secret, body) },
+    body,
+  });
+}
+
 const OPS: Op[] = [
-  { name: 'GET /auth/me', weight: 40, run: (c) => fetch(`${BASE}/auth/me`, { headers: { cookie: c } }) },
-  { name: 'GET /users', weight: 20, run: (c) => fetch(`${BASE}/users?limit=50`, { headers: { cookie: c } }) },
-  { name: 'GET /audit', weight: 20, run: (c) => fetch(`${BASE}/audit?limit=50`, { headers: { cookie: c } }) },
-  { name: 'GET /notifications', weight: 15, run: (c) => fetch(`${BASE}/notifications`, { headers: { cookie: c } }) },
+  { name: 'GET /auth/me', weight: 25, run: (c) => fetch(`${BASE}/auth/me`, { headers: { cookie: c } }) },
+  { name: 'GET /users', weight: 10, run: (c) => fetch(`${BASE}/users?limit=50`, { headers: { cookie: c } }) },
+  { name: 'GET /audit', weight: 10, run: (c) => fetch(`${BASE}/audit?limit=50`, { headers: { cookie: c } }) },
+  { name: 'GET /notifications', weight: 10, run: (c) => fetch(`${BASE}/notifications`, { headers: { cookie: c } }) },
+  { name: 'GET /projects', weight: 20, run: (c) => fetch(`${BASE}/projects`, { headers: { cookie: c } }) },
+  {
+    name: 'GET /projects/:id',
+    weight: 15,
+    run: (c) => fetch(`${BASE}/projects/${any(source.projectIds)}`, { headers: { cookie: c } }),
+  },
+  { name: 'POST signed webhook', weight: 5, run: () => webhook() },
   {
     name: 'PUT /settings/tenant',
     weight: 5,
@@ -173,6 +208,28 @@ await Promise.all(
   }),
 );
 signInTimes.sort((a, b) => a - b);
+
+// Phase 2: a FIXTURE SampTrek connection, backfilled, so project reads and signed webhooks are part of the mix.
+const conn = await fetch(`${BASE}/sources`, {
+  method: 'POST',
+  headers: { ...csrf, cookie: adminCookie },
+  body: JSON.stringify({ kind: 'samptrek', name: 'LOADTEST FIXTURE', mode: 'fixture', vendorCode: 'S360' }),
+});
+if (!conn.ok) throw new Error(`create source ${conn.status}: ${await conn.text()}`);
+const connBody = (await conn.json()) as { id: string; webhookSecret: string };
+source.secret = connBody.webhookSecret;
+// Deliver straight to the API (the public URL in the response may point at the web origin).
+source.webhookUrl = `${BASE}/webhooks/samptrek/${slug}/${connBody.id}`;
+const backfill = await fetch(`${BASE}/sources/${connBody.id}/sync`, {
+  method: 'POST',
+  headers: { ...csrf, cookie: adminCookie },
+  body: JSON.stringify({ full: true }),
+});
+if (!backfill.ok) throw new Error(`backfill ${backfill.status}`);
+const plist = (await (await fetch(`${BASE}/projects`, { headers: { cookie: adminCookie } })).json()) as {
+  items: { id: string }[];
+};
+source.projectIds = plist.items.map((p) => p.id);
 
 const results = [];
 for (const c of LEVELS) results.push(await level(c, cookies));

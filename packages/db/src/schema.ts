@@ -130,3 +130,165 @@ export const notifications = pgTable(
   },
   (t) => [index('notifications_user').on(t.tenantId, t.userId, t.createdAt.desc())],
 );
+
+// ───────────────────────────── Phase 2: project ingestion ─────────────────────────────
+// Supply360 stores projects, markets and events only: no respondent identities, answers, health data or prices.
+
+export const sourceKind = pgEnum('source_kind', ['samptrek', 'sampcloud']);
+export const adapterMode = pgEnum('adapter_mode', ['fixture', 'live']);
+export const lifecycle = pgEnum('project_lifecycle', ['imported', 'ready', 'live', 'paused', 'source_hold', 'closed']);
+
+export const sourceConnections = pgTable(
+  'source_connections',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    kind: sourceKind('kind').notNull(),
+    mode: adapterMode('mode').notNull(),
+    name: text('name').notNull(),
+    baseUrl: text('base_url'),
+    /** Sealed `pjx_` key; never returned by the API. */
+    apiKeySealed: text('api_key_sealed'),
+    /** Sealed webhook signing secret (`whsec_…`), shown once at creation. */
+    webhookSecretSealed: text('webhook_secret_sealed').notNull(),
+    vendorCode: text('vendor_code').notNull(),
+    enabled: boolean('enabled').notNull().default(true),
+    /** `updatedSince` for the next poll; null means the next sync is a full backfill. */
+    pollCheckpoint: timestamp('poll_checkpoint', { withTimezone: true }),
+    lastSyncAt: timestamp('last_sync_at', { withTimezone: true }),
+    lastSyncResult: jsonb('last_sync_result'),
+    /** Signature failures are counted, not stored, so a flood cannot fill the database. */
+    rejectedCount: integer('rejected_count').notNull().default(0),
+    lastRejectedAt: timestamp('last_rejected_at', { withTimezone: true }),
+    lastRejectedReason: text('last_rejected_reason'),
+    createdBy: uuid('created_by'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('source_connections_tenant').on(t.tenantId)],
+);
+
+export const projects = pgTable(
+  'projects',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    connectionId: uuid('connection_id')
+      .notNull()
+      .references(() => sourceConnections.id, { onDelete: 'restrict' }),
+    source: sourceKind('source').notNull(),
+    sourceProjectId: text('source_project_id').notNull(),
+    projectCode: text('project_code').notNull(),
+    name: text('name').notNull(),
+    clientName: text('client_name'),
+    projectManagerName: text('project_manager_name'),
+    projectType: text('project_type'),
+    category: text('category'),
+    sourceStatus: text('source_status').notNull(),
+    lifecycle: lifecycle('lifecycle').notNull().default('imported'),
+    fieldStartAt: timestamp('field_start_at', { withTimezone: true }),
+    fieldEndAt: timestamp('field_end_at', { withTimezone: true }),
+    version: integer('version').notNull().default(1),
+    contentHash: text('content_hash').notNull(),
+    sourceUpdatedAt: timestamp('source_updated_at', { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('projects_source_ref').on(t.tenantId, t.source, t.sourceProjectId),
+    index('projects_tenant_updated').on(t.tenantId, t.updatedAt.desc()),
+  ],
+);
+
+/** Every distinct content of a project, so a person can see what changed at the source and when. */
+export const projectVersions = pgTable(
+  'project_versions',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    version: integer('version').notNull(),
+    contentHash: text('content_hash').notNull(),
+    snapshot: jsonb('snapshot').notNull(),
+    via: text('via').notNull(),
+    receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('project_versions_n').on(t.projectId, t.version)],
+);
+
+export const projectMarkets = pgTable(
+  'project_markets',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    countryCode: text('country_code').notNull(),
+    language: text('language'),
+    targetGroup: text('target_group'),
+    sourceStatus: text('source_status').notNull(),
+    loiMinutes: integer('loi_minutes'),
+    irPercent: integer('ir_percent'),
+    targetCompletes: integer('target_completes').notNull().default(0),
+    completes: integer('completes').notNull().default(0),
+    /** Supply360's own vendor link in this market at the source (other vendors are not stored). */
+    vendorLinkId: text('vendor_link_id'),
+    vendorLinkStatus: text('vendor_link_status'),
+    vendorTarget: integer('vendor_target'),
+    vendorCompletes: integer('vendor_completes'),
+    /** The entry link a person approved; SampTrek never returns vendor entry links through its API. */
+    entryUrl: text('entry_url'),
+    entryApprovedBy: uuid('entry_approved_by'),
+    entryApprovedAt: timestamp('entry_approved_at', { withTimezone: true }),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('project_markets_cc').on(t.projectId, t.countryCode)],
+);
+
+/** Inbox: one row per source event id, so a retried or duplicated delivery is processed once. */
+export const inboundEvents = pgTable(
+  'inbound_events',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    connectionId: uuid('connection_id')
+      .notNull()
+      .references(() => sourceConnections.id, { onDelete: 'restrict' }),
+    source: sourceKind('source').notNull(),
+    eventId: text('event_id').notNull(),
+    eventType: text('event_type').notNull(),
+    deliveryId: text('delivery_id'),
+    signedAt: timestamp('signed_at', { withTimezone: true }).notNull(),
+    receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
+    /** pending → processed | ignored | failed */
+    status: text('status').notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    duplicates: integer('duplicates').notNull().default(0),
+    error: text('error'),
+    payload: jsonb('payload').notNull(),
+    processedAt: timestamp('processed_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('inbound_events_dedup').on(t.tenantId, t.source, t.eventId),
+    index('inbound_events_recent').on(t.tenantId, t.receivedAt.desc()),
+  ],
+);
+
+/** Respondent arrivals on Supply360's redirect endpoints. Unverified until the S2S callback agrees (Phase 5). */
+export const redirectHits = pgTable(
+  'redirect_hits',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    outcome: text('outcome').notNull(),
+    /** The opaque reference Supply360 issued; never a name, email or panel id. */
+    respondentRef: text('respondent_ref'),
+    receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('redirect_hits_project').on(t.tenantId, t.projectId, t.receivedAt.desc())],
+);

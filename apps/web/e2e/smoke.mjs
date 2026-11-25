@@ -86,7 +86,8 @@ await shot('04-users');
 // 4. Command centre, honest empty states
 await page.goto(`${BASE}/`);
 await page.getByText('Integration health').waitFor();
-check('command centre shows no simulated project data', await page.getByText('No projects yet').isVisible());
+await page.getByText('PRX10001').first().waitFor();
+check('command centre lists the imported FIXTURE projects', (await page.getByText('FIXTURE ·').count()) >= 3);
 await axe('command centre');
 await shot('03-command-centre');
 
@@ -126,6 +127,91 @@ await page.goto(`${BASE}/audience/filter`);
 await page.getByText('Arrives in Phase 3').waitFor();
 check('a module not built yet shows its phase, not a mock', true);
 await shot('08-planned-module');
+
+// 7b. Phase 2: projects from SampTrek (FIXTURE), lifecycle, signed webhooks, redirects
+await page.goto(`${BASE}/projects`);
+await page.locator('tbody tr').first().waitFor();
+check('projects list shows the imported FIXTURE projects', (await page.locator('tbody tr').count()) >= 3);
+check(
+  'a project on hold at SampTrek starts held in Supply360',
+  await page.getByText('On hold at source').first().isVisible(),
+);
+await axe('projects');
+await shot('11-projects');
+
+await page.getByRole('link', { name: /Grocery shopper tracker/ }).click();
+await page.getByRole('heading', { name: 'Launch checks' }).waitFor();
+check(
+  'Mark ready is blocked until entry links are approved',
+  await page.getByRole('button', { name: 'Mark ready' }).isDisabled(),
+);
+for (const cc of ['GB', 'US']) {
+  await page
+    .getByRole('row', { name: new RegExp(`^${cc}`) })
+    .getByRole('button', { name: 'Approve' })
+    .click();
+  await page.fill('#entryUrl', `https://samptrek.example/s/FX${cc}?uid=[UID]`);
+  await page.getByRole('dialog').getByRole('button', { name: 'Approve link' }).click();
+  await page.getByRole('dialog').waitFor({ state: 'hidden' });
+}
+await page.getByText('Needs approval').waitFor({ state: 'detached' });
+for (const [action, label] of [
+  ['Mark ready', 'Ready to launch'],
+  ['Launch', 'Live'],
+]) {
+  await page.getByRole('toolbar').getByRole('button', { name: action }).click();
+  await page.fill('#reason', `E2E ${action.toLowerCase()}`);
+  await page.getByRole('dialog').getByRole('button', { name: action }).click();
+  await page.getByRole('dialog').waitFor({ state: 'hidden' });
+  await page.getByText(label, { exact: true }).first().waitFor();
+}
+check('after approval a person can mark ready and launch', await page.getByText('Dispatch allowed').isVisible());
+await axe('project detail');
+await shot('12-project-detail');
+
+await page.goto(`${BASE}/integrations/samptrek`);
+await page.getByText('Webhook URL for SampTrek').waitFor();
+await axe('SampTrek integration');
+await shot('13-samptrek');
+await page.selectOption('#sim-project', 'PRX10001');
+await page.selectOption('#sim-status', 'HOLD');
+await page.getByRole('button', { name: 'Send signed webhook' }).click();
+await page.getByText('Signed webhook delivered').waitFor();
+await page.goto(`${BASE}/projects`);
+await page.getByRole('link', { name: /Grocery shopper tracker/ }).click();
+await page.getByText('Dispatch stopped').waitFor();
+check(
+  'a signed HOLD from SampTrek stops dispatch',
+  await page.getByText('SampTrek has put this project on hold').isVisible(),
+);
+await shot('14-project-source-hold');
+
+await page.goto(`${BASE}/developers`);
+await page.getByText('project.status_changed').first().waitFor();
+check('the webhook log shows the processed delivery', (await page.getByText('processed').count()) > 0);
+await axe('webhook log');
+await shot('15-webhook-log');
+
+await page.goto(`${BASE}/redirects`);
+await page.getByText('QUOTA_FULL').waitFor();
+check(
+  'redirect management lists all 8 SampTrek outcomes',
+  (await page.getByRole('button', { name: /^Copy .* URL$/ }).count()) === 8,
+);
+await axe('redirects');
+await shot('16-redirects');
+
+await page.goto(`${BASE}/integrations/sampcloud`);
+await page.getByText('Blocked in Phase 2').waitFor();
+check('SampCloud shows it is blocked, not a mock', true);
+
+const done = await ctx.newPage();
+await done.goto(`${BASE}/done/quota-full`);
+check(
+  'respondent landing page works without signing in',
+  await done.getByRole('heading', { name: 'This survey is full' }).isVisible(),
+);
+await done.close();
 
 // 8. Themes
 for (const [i, t] of ['arctic', 'violet', 'emerald', 'midnight'].entries()) {

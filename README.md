@@ -90,3 +90,24 @@ DATABASE_ADMIN_URL=postgres://postgres:postgres@localhost:5432/supply360 \
 ```
 
 Flags: `--base`, `--users`, `--levels`, `--duration`, `--json`.
+
+## Phase 2: SampTrek project ingestion
+
+- **Sources** (`/sources`, screen *SampTrek Integration*): a connection is FIXTURE (labelled sample projects shaped
+  exactly like SampTrek's public API) or LIVE (`pjx_` key with `projects:read sessions:read quotas:read`, sealed at
+  rest). Supply360 never calls SampTrek's write endpoints.
+- **Polling and backfill**: `POST /sources/:id/sync` (`{"full":true}` for a backfill) and a poller every
+  `SOURCE_POLL_SECONDS`, guarded by a Postgres advisory lock. The `updatedSince` checkpoint only moves after a clean run.
+- **Signed webhooks**: `POST /api/v1/webhooks/samptrek/:tenant/:connection`, verified with SampTrek's
+  `X-Projexa-Signature` (HMAC-SHA256 of `{timestamp}.{raw body}`, ±300 s). One inbox row per event id, so duplicates are
+  counted and never reprocessed. Bad signatures are counted, not stored.
+- **Versions**: a new project version is kept whenever the agreed content changes; progress counters update in place.
+  Prices, other vendors' links and e-mail addresses are dropped on the way in.
+- **Lifecycle**: `imported → ready → live ⇄ paused → closed`. SampTrek always wins: HOLD forces `source_hold`, CLOSED
+  or INVOICED forces `closed`, and coming back from a hold lands on `paused`. Dispatch is allowed only when the project
+  is `live` here and LIVE at SampTrek (`dispatchAllowed`). Launch checks need an approved entry link per market.
+- **Redirects**: `GET /api/v1/r/:tenant/:project/:outcome?uid={respondent_uid}` for SampTrek's eight outcomes. The
+  arrival is recorded as unverified and the respondent always lands on `/done/:outcome`, so it cannot be an open
+  redirect.
+- The demo seed creates a FIXTURE connection and imports its projects. It needs the same `FIELD_ENCRYPTION_KEY` as the
+  API.

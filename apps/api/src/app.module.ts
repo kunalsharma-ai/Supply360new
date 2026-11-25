@@ -9,6 +9,12 @@ import { SessionGuard } from './auth/session.guard.js';
 import { ProblemFilter } from './common/problem.filter.js';
 import { ENV, type Env } from './config.js';
 import { DbModule } from './db/db.module.js';
+import { IngestionService } from './ingestion/ingestion.service.js';
+import { SourcePoller } from './ingestion/poller.js';
+import { ProjectsController } from './ingestion/projects.controller.js';
+import { RedirectController } from './ingestion/redirect.controller.js';
+import { SourcesController } from './ingestion/sources.controller.js';
+import { WebhookController } from './ingestion/webhook.controller.js';
 import { HealthController } from './health/health.controller.js';
 import { NotificationsController } from './notifications/notifications.controller.js';
 import { OpenApiController } from './openapi.js';
@@ -23,7 +29,9 @@ export class AppModule {
       module: AppModule,
       global: true,
       imports: [
-        ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: env.NODE_ENV === 'test' ? 10_000 : env.API_RATE_LIMIT }]),
+        ThrottlerModule.forRoot([
+          { name: 'default', ttl: 60_000, limit: env.NODE_ENV === 'test' ? 10_000 : env.API_RATE_LIMIT },
+        ]),
         { module: DbModule, providers: [{ provide: ENV, useValue: env }], exports: [ENV] },
       ],
       providers: [
@@ -31,6 +39,8 @@ export class AppModule {
         AuditService,
         AuthService,
         UsersService,
+        IngestionService,
+        SourcePoller,
         { provide: APP_GUARD, useClass: ThrottlerGuard },
         { provide: APP_GUARD, useClass: SessionGuard },
         { provide: APP_FILTER, useClass: ProblemFilter },
@@ -44,6 +54,10 @@ export class AppModule {
         AuditController,
         SettingsController,
         NotificationsController,
+        SourcesController,
+        WebhookController,
+        ProjectsController,
+        RedirectController,
       ],
     };
   }
