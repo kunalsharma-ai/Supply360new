@@ -217,16 +217,13 @@ describe('tenant isolation (spec acceptance: tenant A cannot access tenant B)', 
 describe('settings and audit', () => {
   it('saves tenant settings with a version and an audit entry', async () => {
     const { agent } = await signIn(h, 'beta', 'admin@beta.example.invalid');
-    const put = await agent
-      .put('/api/v1/settings/tenant')
-      .set(csrf)
-      .send({
-        displayName: 'Beta Research',
-        timezone: 'Asia/Kolkata',
-        locale: 'en-IN',
-        defaultTheme: 'emerald',
-        defaultExecutionMode: 'manual',
-      });
+    const put = await agent.put('/api/v1/settings/tenant').set(csrf).send({
+      displayName: 'Beta Research',
+      timezone: 'Asia/Kolkata',
+      locale: 'en-IN',
+      defaultTheme: 'emerald',
+      defaultExecutionMode: 'manual',
+    });
     expect(put.status).toBe(200);
     expect(put.body.version).toBe(1);
     const bad = await agent

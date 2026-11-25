@@ -8,7 +8,11 @@ export const PERMISSIONS = 'permissions';
 /** Routes reachable with a password-only session (MFA still owed). */
 export const MFA_PENDING_OK = 'mfa_pending_ok';
 
+/** Server-to-server routes that prove themselves with a signature (webhooks): no session, no CSRF header. */
+export const SIGNED_INBOUND = 'signed_inbound';
+
 export const Public = () => SetMetadata(PUBLIC, true);
+export const SignedInbound = () => SetMetadata(SIGNED_INBOUND, true);
 export const MfaPendingOk = () => SetMetadata(MFA_PENDING_OK, true);
 export const RequirePermissions = (...p: Permission[]) => SetMetadata(PERMISSIONS, p);
 

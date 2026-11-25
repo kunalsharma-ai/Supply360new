@@ -6,7 +6,7 @@ import { useCan } from '@/components/session';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardBody } from '@/components/ui/card';
 import { NoPermission } from '@/components/ui/states';
-import { MODULES } from '@/lib/modules';
+import { CURRENT_PHASE, MODULES } from '@/lib/modules';
 
 const PHASES = [
   'Foundations',
@@ -32,18 +32,32 @@ export default function PlannedModule() {
       <Card>
         <CardBody className="flex flex-col gap-6 md:flex-row">
           <div className="flex-1">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <CalendarClock className="size-4 text-accent" /> Arrives in Phase {m.phase}: {PHASES[m.phase - 1]}
-            </div>
-            <p className="mt-2 text-sm text-muted">
-              This module is not built yet, so this page shows no data and no controls. It will open here when its phase
-              is delivered and tested.
-            </p>
+            {m.phase <= CURRENT_PHASE ? (
+              <>
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <CalendarClock className="size-4 text-warning" /> Blocked in Phase {m.phase}: waiting on an outside
+                  dependency
+                </div>
+                <p className="mt-2 text-sm text-muted">
+                  {m.summary} This page shows no data and no controls until the dependency is available.
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <CalendarClock className="size-4 text-accent" /> Arrives in Phase {m.phase}: {PHASES[m.phase - 1]}
+                </div>
+                <p className="mt-2 text-sm text-muted">
+                  This module is not built yet, so this page shows no data and no controls. It will open here when its
+                  phase is delivered and tested.
+                </p>
+              </>
+            )}
           </div>
           <ol className="flex-1 space-y-1.5" aria-label="Delivery phases">
             {PHASES.map((p, i) => (
               <li key={p} className="flex items-center gap-2 text-sm">
-                {i + 1 < 2 ? (
+                {i + 1 <= CURRENT_PHASE ? (
                   <CheckCircle2 className="size-4 text-success" />
                 ) : (
                   <CircleDashed className={i + 1 === m.phase ? 'size-4 text-accent' : 'size-4 text-muted/60'} />

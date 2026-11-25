@@ -55,6 +55,7 @@ export async function startHarness(): Promise<Harness> {
   const env = loadEnv({
     NODE_ENV: 'test',
     LOGIN_RATE_LIMIT: '1000',
+    SOURCE_POLL_SECONDS: '0',
     DATABASE_URL: appUrl,
     DATABASE_ADMIN_URL: adminUrl,
     SESSION_SECRET: randomBytes(32).toString('hex'),

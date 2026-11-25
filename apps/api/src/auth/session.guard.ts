@@ -2,7 +2,7 @@ import { Injectable, type CanActivate, type ExecutionContext } from '@nestjs/com
 import { Reflector } from '@nestjs/core';
 import type { Permission } from '@s360/contracts';
 import type { Request } from 'express';
-import { MFA_PENDING_OK, PERMISSIONS, PUBLIC } from '../common/decorators.js';
+import { MFA_PENDING_OK, PERMISSIONS, PUBLIC, SIGNED_INBOUND } from '../common/decorators.js';
 import { problem } from '../common/problem.js';
 import { AuthService } from './auth.service.js';
 import { SESSION_COOKIE } from './session-token.js';
@@ -23,6 +23,8 @@ export class SessionGuard implements CanActivate {
   async canActivate(ec: ExecutionContext): Promise<boolean> {
     const req = ec.switchToHttp().getRequest<Request>();
     const targets = [ec.getHandler(), ec.getClass()];
+    // The handler verifies the signature on the raw body before doing anything.
+    if (this.reflector.getAllAndOverride<boolean>(SIGNED_INBOUND, targets)) return true;
     if (!SAFE.has(req.method) && req.get('x-s360-csrf') !== '1') {
       throw problem.forbidden('csrf_header_missing', 'Missing x-s360-csrf header');
     }
