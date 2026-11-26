@@ -385,12 +385,12 @@ check(
 await done.close();
 
 // 8. Themes
-for (const [i, t] of ['arctic', 'violet', 'emerald', 'midnight'].entries()) {
+for (const [i, t] of ['arctic', 'violet', 'emerald', 'midnight', 'glass'].entries()) {
   await page.evaluate((id) => localStorage.setItem('s360-theme', id), t);
   await page.goto(`${BASE}/`);
   await page.getByText('Integration health').waitFor();
   check(`theme ${t} applies`, (await page.evaluate(() => document.documentElement.dataset.theme)) === t);
-  if (t !== 'midnight') await axe(`command centre (${t})`);
+  if (t !== 'glass') await axe(`command centre (${t})`);
   await shot(`09-theme-${i + 1}-${t}`);
 }
 
