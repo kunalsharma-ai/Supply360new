@@ -14,7 +14,8 @@ import { Sealer } from '../crypto/sealer.js';
 const url = process.env.DATABASE_ADMIN_URL;
 const key = process.env.FIELD_ENCRYPTION_KEY;
 const previous = process.env.FIELD_ENCRYPTION_KEY_PREVIOUS;
-if (!url || !key || !previous) throw new Error('DATABASE_ADMIN_URL, FIELD_ENCRYPTION_KEY and FIELD_ENCRYPTION_KEY_PREVIOUS are required');
+if (!url || !key || !previous)
+  throw new Error('DATABASE_ADMIN_URL, FIELD_ENCRYPTION_KEY and FIELD_ENCRYPTION_KEY_PREVIOUS are required');
 const sealer = new Sealer(key, previous);
 
 const COLUMNS: { table: string; column: string; id: string; context: (id: string) => string }[] = [
@@ -24,6 +25,9 @@ const COLUMNS: { table: string; column: string; id: string; context: (id: string
   { table: 'source_connections', column: 'callback_secret_sealed', id: 'id', context: callbackContext },
   { table: 'audience_connections', column: 'secret_sealed', id: 'id', context: madpSecretContext },
   { table: 'sampintel_connections', column: 'token_sealed', id: 'tenant_id', context: (id) => `sampintel:${id}` },
+  { table: 'copilot_ai', column: 'sealed_key', id: 'tenant_id', context: (id) => `copilot-ai:${id}` },
+  { table: 'alert_settings', column: 'smtp_password_sealed', id: 'tenant_id', context: (id) => `alerts-smtp:${id}` },
+  { table: 'alert_settings', column: 'webhook_url_sealed', id: 'tenant_id', context: (id) => `alerts-webhook:${id}` },
 ];
 
 const client = new pg.Client({ connectionString: url });
@@ -44,7 +48,10 @@ try {
       }
       const { plain, keyIndex } = opened;
       if (keyIndex === 0) continue;
-      await client.query(`update ${c.table} set ${c.column} = $1 where ${c.id} = $2`, [sealer.seal(plain, c.context(r.id)), r.id]);
+      await client.query(`update ${c.table} set ${c.column} = $1 where ${c.id} = $2`, [
+        sealer.seal(plain, c.context(r.id)),
+        r.id,
+      ]);
       moved++;
     }
     console.log(`${c.table}.${c.column}: ${rows.length} sealed, ${moved} re-sealed`);

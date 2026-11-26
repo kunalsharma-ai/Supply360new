@@ -560,6 +560,46 @@ await page.locator('[data-sonner-toast]').first().waitFor({ state: 'detached', t
 await axe('reports');
 await shot('44-reports');
 
+// Time savers: copy setup and templates, email and chat alerts, the Copilot with your own AI
+await page.goto(projectUrl);
+await page.getByRole('toolbar').getByRole('button', { name: 'Save as template' }).click();
+await page.fill('#tpl-name', 'E2E wave template');
+await page.getByRole('dialog').getByRole('button', { name: 'Save template' }).click();
+await page.getByRole('dialog').waitFor({ state: 'hidden' });
+await page.getByRole('toolbar').getByRole('button', { name: 'Copy setup' }).click();
+const tplOption = page.locator('#setup-source option', { hasText: 'E2E wave template' });
+await tplOption.waitFor({ state: 'attached' });
+check('a saved template is offered when copying setup', (await tplOption.count()) === 1);
+await page.selectOption('#setup-source', { label: (await page.locator('#setup-source optgroup[label=Projects] option').first().textContent()).trim() });
+await page.locator('[data-testid=setup-preview]').getByText(/What will change|Left as it is|cannot set/).first().waitFor();
+check('copying setup shows what will change before saving', true);
+await axe('copy setup');
+await shot('45-copy-setup');
+await page.keyboard.press('Escape');
+
+await page.goto(`${BASE}/notifications`);
+const alertsCard = page.locator('[data-testid=alert-settings]');
+await alertsCard.getByText('Email and chat alerts').waitFor();
+await alertsCard.getByText('Email alerts', { exact: true }).click();
+await page.locator('#al-preset').waitFor();
+check('email alerts offer ready mail services', (await page.locator('#al-preset option').count()) >= 4);
+await alertsCard.getByText('Slack, Google Chat or Teams', { exact: true }).click();
+await page.locator('#al-url').waitFor();
+check('chat alerts take an incoming webhook address', true);
+await axe('alert settings');
+await alertsCard.scrollIntoViewIfNeeded();
+await shot('46-alerts');
+
+await page.goto(`${BASE}/copilot`);
+const aiCard = page.locator('[data-testid=copilot-ai]');
+await aiCard.getByText('AI for the Copilot').waitFor();
+check('the Copilot says it answers by rules until an AI is added', (await aiCard.getByText('Rules only').count()) === 1);
+await page.selectOption('#cai-preset', { index: 1 });
+check('choosing a provider fills the API type and model', (await page.inputValue('#cai-model')).length > 0);
+await axe('copilot AI');
+await aiCard.scrollIntoViewIfNeeded();
+await shot('47-copilot-ai');
+
 await page.goto(`${BASE}/integrations/sampcloud`);
 await page.getByText('Blocked in Phase 2').waitFor();
 check('SampCloud shows it is blocked, not a mock', true);

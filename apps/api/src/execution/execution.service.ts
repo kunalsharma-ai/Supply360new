@@ -251,9 +251,14 @@ export class ExecutionService {
   // ───────────────────────────── policy and kill switch ─────────────────────────────
 
   async setPolicy(ctx: RequestContext, projectId: string, body: ExecutionPolicyUpdate) {
+    return withTenant(this.db, ctx.tenantId, (tx) => this.writePolicy(tx, ctx, projectId, body));
+  }
+
+  /** Saves a policy inside the caller's transaction, so project setup copies can apply it with everything else. */
+  async writePolicy(tx: Tx, ctx: RequestContext, projectId: string, body: ExecutionPolicyUpdate) {
     if (body.mode === 'auto' && !ctx.permissions.includes('execution.approve'))
       throw problem.forbidden('approval_required', 'Turning on automatic mode needs the execution.approve permission');
-    return withTenant(this.db, ctx.tenantId, async (tx) => {
+    {
       await this.lockProject(tx, projectId);
       const prev = await this.policyOf(tx, projectId);
       const values = {
@@ -311,7 +316,7 @@ export class ExecutionService {
         },
       });
       return { policy: policy!, cancelledSystemBatches: cancelled };
-    });
+    }
   }
 
   async setKillSwitch(ctx: RequestContext, body: KillSwitch) {

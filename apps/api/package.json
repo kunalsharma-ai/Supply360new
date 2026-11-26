@@ -16,6 +16,7 @@
     "load-test": "node --env-file-if-exists=../../.env dist/scripts/load-test.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "1.8.0",
     "@nestjs/common": "12.6.2",
     "@nestjs/core": "12.6.2",
     "@nestjs/platform-express": "12.6.2",
@@ -28,6 +29,7 @@
     "exceljs": "4.4.0",
     "helmet": "8.3.0",
     "jose": "6.2.18",
+    "nodemailer": "10.5.0",
     "otpauth": "9.6.0",
     "pg": "8.23.1",
     "prom-client": "15.1.3",

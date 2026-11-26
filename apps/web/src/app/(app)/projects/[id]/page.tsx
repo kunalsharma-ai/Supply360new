@@ -6,6 +6,8 @@ import {
   CheckCircle2,
   CircleDashed,
   Copy,
+  CopyPlus,
+  BookmarkPlus,
   Link2,
   OctagonX,
   Pause,
@@ -18,6 +20,7 @@ import { useParams } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/page-header';
+import { CopySetupDialog, SaveTemplateDialog } from '@/components/setup/copy-setup';
 import { SyntheticQaCard } from '@/components/synthetic-qa-card';
 import { useCan } from '@/components/session';
 import { Badge } from '@/components/ui/badge';
@@ -54,6 +57,8 @@ export default function ProjectPage() {
   const qc = useQueryClient();
   const [acting, setActing] = useState<LifecycleAction | null>(null);
   const [linking, setLinking] = useState<Market | null>(null);
+  const [copying, setCopying] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const p = useQuery({
     queryKey: ['project', id],
@@ -146,7 +151,22 @@ export default function ProjectPage() {
             </Button>
           );
         })}
+        <span className="mx-1 hidden w-px bg-border sm:block" aria-hidden />
+        <Button
+          size="sm"
+          onClick={() => setCopying(true)}
+          title="Copy policy, reminders, allocation and cell criteria from another project or a template"
+        >
+          <CopyPlus /> Copy setup
+        </Button>
+        {canManage && (
+          <Button size="sm" variant="ghost" onClick={() => setSaving(true)}>
+            <BookmarkPlus /> Save as template
+          </Button>
+        )}
       </div>
+      <CopySetupDialog open={copying} onOpenChange={setCopying} projectId={id} projectCode={d.projectCode} />
+      <SaveTemplateDialog open={saving} onOpenChange={setSaving} projectId={id} />
       {d.lifecycle === 'source_hold' && (
         <p role="status" className="mb-6 rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
           SampTrek has put this project on hold, so Supply360 has stopped it. When SampTrek resumes it, the project
