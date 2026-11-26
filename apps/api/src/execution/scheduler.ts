@@ -5,6 +5,8 @@ import type pg from 'pg';
 import { ENV, type Env } from '../config.js';
 import { DB } from '../db/db.module.js';
 import { FieldworkService } from '../fieldwork/fieldwork.service.js';
+import { IntelligenceService } from '../intelligence/intelligence.service.js';
+import { ReportsService } from '../reports/reports.service.js';
 import { ExecutionService } from './execution.service.js';
 
 const LOCK = 360_004;
@@ -26,6 +28,8 @@ export class DispatchScheduler implements OnApplicationBootstrap, OnApplicationS
     @Inject(ENV) private readonly env: Env,
     private readonly exec: ExecutionService,
     private readonly fieldwork: FieldworkService,
+    private readonly intelligence: IntelligenceService,
+    private readonly reports: ReportsService,
   ) {}
 
   onApplicationBootstrap() {
@@ -52,6 +56,8 @@ export class DispatchScheduler implements OnApplicationBootstrap, OnApplicationS
             await this.exec.tick(t.id);
             await this.fieldwork.tick(t.id);
             await this.fieldwork.autoReconcile(t.id, this.env.RECONCILE_MINUTES);
+            await this.intelligence.tick(t.id);
+            await this.reports.tick(t.id);
           } catch (e) {
             this.log.error(`${t.slug}: ${(e as Error).message}`);
           }

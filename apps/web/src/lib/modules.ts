@@ -26,7 +26,7 @@ export interface ModuleDef {
 }
 
 /** The last delivered phase. Phases up to and including it show as done on the status pages. */
-export const CURRENT_PHASE = 6;
+export const CURRENT_PHASE = 7;
 
 export const MODULES: ModuleDef[] = [
   {
@@ -134,6 +134,7 @@ export const MODULES: ModuleDef[] = [
     group: 'Intelligence',
     href: '/intelligence/audience',
     phase: 7,
+    ready: true,
     permission: 'audience.read',
     summary: 'Recommendations from measured historical performance.',
   },
@@ -144,6 +145,7 @@ export const MODULES: ModuleDef[] = [
     group: 'Intelligence',
     href: '/intelligence/delivery',
     phase: 7,
+    ready: true,
     permission: 'projects.read',
     summary: 'Invitation needs, delivery ranges and deadline risk.',
   },
@@ -286,6 +288,7 @@ export const MODULES: ModuleDef[] = [
     group: 'Intelligence',
     href: '/copilot',
     phase: 7,
+    ready: true,
     permission: 'copilot.use',
     summary: 'Typed queries and previews; no arbitrary SQL or commands.',
   },
@@ -340,6 +343,7 @@ export const MODULES: ModuleDef[] = [
     group: 'Close-out',
     href: '/reports',
     phase: 7,
+    ready: true,
     permission: 'reports.read',
     summary: 'Excel, CSV and JSON exports, timezone-aware and access-controlled.',
   },

@@ -34,6 +34,12 @@ import { UsersController } from './users/users.controller.js';
 import { UsersService } from './users/users.service.js';
 
 import { SampIntelController, SampIntelService } from './sampintel/sampintel.js';
+import { IntelligenceController } from './intelligence/intelligence.controller.js';
+import { IntelligenceService } from './intelligence/intelligence.service.js';
+import { ReportsController } from './reports/reports.controller.js';
+import { ReportsService } from './reports/reports.service.js';
+import { CopilotController } from './copilot/copilot.controller.js';
+import { CopilotService } from './copilot/copilot.service.js';
 @Module({})
 export class AppModule {
   static forRoot(env: Env): DynamicModule {
@@ -48,6 +54,9 @@ export class AppModule {
       ],
       providers: [
         SampIntelService,
+        IntelligenceService,
+        ReportsService,
+        CopilotService,
         { provide: ENV, useValue: env },
         AuditService,
         AuthService,
@@ -66,6 +75,9 @@ export class AppModule {
       exports: [ENV],
       controllers: [
         SampIntelController,
+        IntelligenceController,
+        ReportsController,
+        CopilotController,
         HealthController,
         OpenApiController,
         AuthController,
