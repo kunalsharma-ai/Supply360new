@@ -17,8 +17,8 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   return (
     <html
       lang="en"
-      data-theme="glass"
-      data-mode="dark"
+      data-theme="adventure"
+      data-mode="light"
       className={`${GeistSans.variable} ${GeistMono.variable}`}
       suppressHydrationWarning
     >

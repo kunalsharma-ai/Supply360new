@@ -1,7 +1,7 @@
 @import 'tailwindcss';
 
 /*
- * Supply360 design tokens. Four themes share one set of semantic tokens; components only use the semantic names.
+ * Supply360 design tokens. Six themes share one set of semantic tokens; components only use the semantic names.
  * Contrast: text on surface and text-muted on surface are ≥ 4.5:1 in every theme (checked in tokens.test.ts).
  */
 @custom-variant dark (&:where([data-mode='dark'], [data-mode='dark'] *));
@@ -108,6 +108,33 @@
   --glass-3: rgb(255 255 255 / 0.12);
   --glass-edge: rgb(255 255 255 / 0.12);
   color-scheme: dark;
+}
+
+[data-theme='adventure'] {
+  /* Adventure Park: a bright, playful light theme. Candy-coloured accents over a pastel sky, chunky 3D cards. */
+  --bg: #f5f1ff;
+  --surface: #ffffff;
+  --surface-2: #f6f2ff;
+  --surface-3: #ece5ff;
+  --border: #ddd2fb;
+  --text: #1d1442;
+  --text-muted: #554a7d;
+  --accent: #6d28d9;
+  --accent-strong: #5b21b6;
+  --accent-contrast: #ffffff;
+  --success: #03623f;
+  --warning: #7f3b00;
+  --danger: #a3102f;
+  --info: #1d4ed8;
+  --ring: #7c3aed;
+  --glow: 0 1px 0 rgb(255 255 255 / 0.9) inset, 0 4px 0 #d9ccfb, 0 14px 30px -12px rgb(109 40 217 / 0.35);
+  --fun-pink: #ff5fa2;
+  --fun-orange: #ff9f43;
+  --fun-yellow: #ffd23f;
+  --fun-mint: #2ed3a3;
+  --fun-sky: #38b6ff;
+  --fun-violet: #8b5cf6;
+  color-scheme: light;
 }
 
 @theme inline {
@@ -217,4 +244,214 @@ body {
   [data-theme='glass'] .bg-surface-2 {
     background-color: var(--surface-2);
   }
+}
+
+/* ---------------------------------------------------------------------------------------------------------------
+ * Adventure Park theme: pastel sky with drifting colour clouds, chunky 3D "clay" cards that lift on hover,
+ * candy gradient buttons with a pressable ledge, and a rainbow active pill in the sidebar.
+ * All motion is transform/opacity only and stops under prefers-reduced-motion or the in-app motion toggle.
+ * ------------------------------------------------------------------------------------------------------------- */
+[data-theme='adventure'] body {
+  background:
+    radial-gradient(48rem 32rem at 0% 0%, rgb(255 95 162 / 0.22), transparent 60%),
+    radial-gradient(44rem 32rem at 100% 0%, rgb(56 182 255 / 0.24), transparent 60%),
+    radial-gradient(40rem 34rem at 100% 100%, rgb(46 211 163 / 0.22), transparent 60%),
+    radial-gradient(40rem 30rem at 0% 100%, rgb(255 210 63 / 0.26), transparent 60%), var(--bg);
+  background-attachment: fixed;
+}
+[data-theme='adventure'] body::before {
+  content: '';
+  position: fixed;
+  inset: -20vmax;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(18vmax 18vmax at 20% 30%, rgb(139 92 246 / 0.16), transparent 70%),
+    radial-gradient(16vmax 16vmax at 75% 25%, rgb(255 159 67 / 0.16), transparent 70%),
+    radial-gradient(20vmax 20vmax at 60% 80%, rgb(56 182 255 / 0.14), transparent 70%);
+  animation: fun-drift 28s ease-in-out infinite alternate;
+  will-change: transform;
+}
+@keyframes fun-drift {
+  to {
+    transform: translate3d(4vmax, -3vmax, 0) rotate(8deg) scale(1.06);
+  }
+}
+[data-theme='adventure'] .bg-bg {
+  background-color: transparent;
+}
+[data-theme='adventure'] .bg-bg\/80 {
+  background-color: rgb(255 255 255 / 0.6);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  backdrop-filter: blur(16px) saturate(180%);
+}
+[data-theme='adventure'] aside.bg-surface {
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.85), rgb(246 242 255 / 0.85));
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+[data-theme='adventure'] .rounded-xl.border {
+  border-color: #e4dafc;
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 4px 0 #e6dcfd,
+    0 18px 36px -18px rgb(76 29 149 / 0.28);
+  transition:
+    transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.25s ease;
+}
+[data-theme='adventure'] .rounded-xl.border:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 6px 0 #ddd0fc,
+    0 24px 44px -18px rgb(76 29 149 / 0.34);
+}
+[data-theme='adventure'] .bg-accent {
+  background-image: linear-gradient(135deg, #7c3aed, #c026d3 55%, #db2777);
+}
+[data-theme='adventure'] button.bg-accent,
+[data-theme='adventure'] a.bg-accent {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.35),
+    0 4px 0 #4c1d95,
+    0 10px 20px -8px rgb(192 38 211 / 0.55);
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease,
+    filter 0.2s ease;
+}
+[data-theme='adventure'] button.bg-accent:hover,
+[data-theme='adventure'] a.bg-accent:hover {
+  filter: brightness(1.06) saturate(1.1);
+  transform: translateY(-1px);
+}
+[data-theme='adventure'] button.bg-accent:active,
+[data-theme='adventure'] a.bg-accent:active {
+  transform: translateY(3px);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.35),
+    0 1px 0 #4c1d95,
+    0 4px 10px -6px rgb(192 38 211 / 0.55);
+}
+[data-theme='adventure'] nav a[aria-current='page'] {
+  color: #fff;
+  background-image: linear-gradient(120deg, #7c3aed, #db2777 60%, #f97316);
+  box-shadow:
+    0 3px 0 #4c1d95,
+    0 8px 18px -8px rgb(219 39 119 / 0.6);
+  --tw-ring-color: transparent;
+}
+[data-theme='adventure'] nav a[aria-current='page'] svg {
+  color: #fff;
+}
+[data-theme='adventure'] nav a:not([aria-current='page']):hover svg {
+  transform: rotate(-8deg) scale(1.15);
+}
+[data-theme='adventure'] nav a svg {
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+[data-theme='adventure'] [role='dialog'].bg-surface,
+[data-theme='adventure'] [role='menu'] {
+  box-shadow:
+    0 4px 0 #e6dcfd,
+    0 24px 60px -20px rgb(76 29 149 / 0.4);
+}
+
+/* ---------- Shared playful building blocks (used by the dashboard in every theme) ---------- */
+.fun-tilt {
+  transform: perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateZ(0);
+  transform-style: preserve-3d;
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.fun-pop {
+  animation: fun-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation-delay: var(--d, 0ms);
+}
+@keyframes fun-pop {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.96);
+  }
+}
+.fun-float {
+  animation: fun-float 6s ease-in-out infinite;
+  animation-delay: var(--d, 0ms);
+}
+@keyframes fun-float {
+  50% {
+    transform: translateY(-10px) rotate(4deg);
+  }
+}
+.fun-spin {
+  animation: fun-spin 18s linear infinite;
+}
+@keyframes fun-spin {
+  from {
+    transform: rotateX(68deg) rotateZ(0deg);
+  }
+  to {
+    transform: rotateX(68deg) rotateZ(360deg);
+  }
+}
+.fun-cube {
+  transform-style: preserve-3d;
+  animation: fun-cube 14s linear infinite;
+}
+@keyframes fun-cube {
+  from {
+    transform: rotateX(-22deg) rotateY(0deg);
+  }
+  to {
+    transform: rotateX(-22deg) rotateY(360deg);
+  }
+}
+.fun-shine {
+  background-size: 200% 100%;
+  animation: fun-shine 6s ease-in-out infinite;
+}
+@keyframes fun-shine {
+  50% {
+    background-position: 100% 0;
+  }
+}
+.fun-wiggle:hover svg {
+  animation: fun-wiggle 0.5s ease;
+}
+@keyframes fun-wiggle {
+  25% {
+    transform: rotate(-12deg) scale(1.1);
+  }
+  75% {
+    transform: rotate(10deg) scale(1.1);
+  }
+}
+[data-motion='off'] *,
+[data-motion='off'] *::before,
+[data-motion='off'] *::after {
+  animation: none !important;
+  transition-duration: 0.01ms !important;
+}
+[data-motion='off'] .fun-tilt {
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fun-tilt {
+    transform: none !important;
+  }
+  [data-theme='adventure'] body::before,
+  .fun-float,
+  .fun-spin,
+  .fun-cube,
+  .fun-shine {
+    animation: none !important;
+  }
+}
+
+/* Light themes: darken the toast rich colours so their text keeps 4.5:1 on the tinted toast. */
+html [data-sonner-toaster][data-sonner-theme='light'] {
+  --success-text: #03623f;
+  --error-text: #a3102f;
+  --info-text: #1d4ed8;
+  --warning-text: #7f3b00;
 }
