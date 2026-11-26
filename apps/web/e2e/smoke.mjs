@@ -480,6 +480,30 @@ check(
 await axe('redirects');
 await shot('16-redirects');
 
+// Module 26: SampIntel AI link, FIXTURE summary shown beside human sample, never added to it
+await page.goto(`${BASE}/integrations/sampintel`);
+await page.getByRole('heading', { name: 'SampIntel AI Integration' }).waitFor();
+await page.getByRole('button', { name: 'Save link' }).click();
+await page.getByText('SampIntel link saved').waitFor();
+await page.getByRole('button', { name: 'Check' }).click();
+await page.locator('[data-testid=sampintel-status]').getByText('OK').waitFor();
+check('the FIXTURE SampIntel link saves and checks ok', true);
+await page.selectOption('select[aria-label="QA mode for PRX10001"]', 'both_separate');
+await page.fill('#qa-reason', 'E2E synthetic QA beside human sample');
+await page.getByRole('dialog').getByRole('button', { name: 'Change mode' }).click();
+await page.getByText('QA mode changed').waitFor();
+await page.mouse.move(5, 5);
+await page.locator('[data-sonner-toast]').first().waitFor({ state: 'detached', timeout: 15000 });
+await axe('SampIntel integration');
+await shot('38-sampintel-link');
+await page.goto(`${BASE}/projects`);
+await page.getByRole('link', { name: /Grocery shopper tracker Q1/ }).click();
+const card = page.locator('[data-testid=synthetic-qa-card]');
+await card.getByText('Synthetic sessions').waitFor();
+check('the project page shows the synthetic QA card, labelled and separate', (await card.getByText('Never counted as human sample', { exact: false }).count()) >= 1 && (await card.getByText('FIXTURE').count()) >= 1);
+await card.scrollIntoViewIfNeeded();
+await shot('39-project-synthetic-qa');
+
 await page.goto(`${BASE}/integrations/sampcloud`);
 await page.getByText('Blocked in Phase 2').waitFor();
 check('SampCloud shows it is blocked, not a mock', true);

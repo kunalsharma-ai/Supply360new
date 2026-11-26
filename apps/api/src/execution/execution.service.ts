@@ -61,6 +61,7 @@ export const REASON_TEXT: Record<string, string> = {
   madp_unavailable: 'MADP could not be reached',
   madp_rejected: 'MADP refused the request',
   project_closed: 'The project is closed',
+  qa_mode_synthetic_only: 'This project is set to authorized synthetic QA only, so no human invitations go out',
   cell_closed: 'The quota cell is closed',
   deadline_passed: 'The field end date has passed',
   cell_target_reached: 'The quota cell has all the completes it needs',
@@ -216,6 +217,8 @@ export class ExecutionService {
     if ((await this.halted(tx)).halted) return 'halted';
     if (!policy) return 'policy_missing';
     if (p.lifecycle === 'closed') return 'project_closed';
+    // Module 26: a project set to synthetic QA only gets no human invitations at all.
+    if (p.qaMode === 'synthetic_qa_only') return 'qa_mode_synthetic_only';
     if (!dispatchAllowed(p)) return 'project_not_live';
     if (cell.removed || !cell.isOpen) return 'cell_closed';
     if (p.fieldEndAt && p.fieldEndAt <= now) return 'deadline_passed';

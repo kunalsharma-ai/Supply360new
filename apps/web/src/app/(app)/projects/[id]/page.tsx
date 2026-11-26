@@ -18,6 +18,7 @@ import { useParams } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/page-header';
+import { SyntheticQaCard } from '@/components/synthetic-qa-card';
 import { useCan } from '@/components/session';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -290,6 +291,8 @@ export default function ProjectPage() {
             ))}
           </ul>
         </Card>
+
+        <SyntheticQaCard projectId={id} />
 
         <Card>
           <CardHeader title="Versions" description="A new version is kept each time the content changes at SampTrek." />

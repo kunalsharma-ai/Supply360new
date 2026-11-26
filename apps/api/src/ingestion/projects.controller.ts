@@ -94,6 +94,7 @@ export class ProjectsController {
       source: p.source,
       sourceProjectId: p.sourceProjectId,
       projectCode: p.projectCode,
+      qaMode: p.qaMode,
       name: p.name,
       clientName: p.clientName,
       projectManagerName: p.projectManagerName,

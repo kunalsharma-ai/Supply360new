@@ -26,7 +26,7 @@ export interface ModuleDef {
 }
 
 /** The last delivered phase. Phases up to and including it show as done on the status pages. */
-export const CURRENT_PHASE = 5;
+export const CURRENT_PHASE = 6;
 
 export const MODULES: ModuleDef[] = [
   {
@@ -307,6 +307,7 @@ export const MODULES: ModuleDef[] = [
     group: 'Integrations',
     href: '/integrations/sampintel',
     phase: 6,
+    ready: true,
     permission: 'sampintel.manage',
     summary: 'Human Only, Synthetic QA Only or Both Separate per project.',
   },

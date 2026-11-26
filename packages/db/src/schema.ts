@@ -192,6 +192,8 @@ export const projects = pgTable(
     version: integer('version').notNull().default(1),
     contentHash: text('content_hash').notNull(),
     sourceUpdatedAt: timestamp('source_updated_at', { withTimezone: true }),
+    /** Module 26: human_only, synthetic_qa_only or both_separate. Synthetic QA never adds to human counts. */
+    qaMode: text('qa_mode').notNull().default('human_only'),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -773,4 +775,22 @@ export const rewardEvents = pgTable(
     uniqueIndex('reward_events_invitation').on(t.invitationId),
     index('reward_events_status').on(t.tenantId, t.status),
   ],
+);
+
+/** Module 26: one SampIntel AI connection per tenant. Scoped service token, sealed; never a shared database. */
+export const sampintelConnections = pgTable(
+  'sampintel_connections',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    mode: adapterMode('mode').notNull(),
+    baseUrl: text('base_url'),
+    tokenSealed: text('token_sealed'),
+    enabled: boolean('enabled').notNull().default(false),
+    lastCheckAt: timestamp('last_check_at', { withTimezone: true }),
+    lastStatus: text('last_status'),
+    updatedBy: uuid('updated_by'),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('sampintel_tenant').on(t.tenantId)],
 );

@@ -114,7 +114,7 @@ function webhook(): Promise<Response> {
 }
 
 const OPS: Op[] = [
-  { name: 'GET /auth/me', weight: 15, run: (c) => fetch(`${BASE}/auth/me`, { headers: { cookie: c } }) },
+  { name: 'GET /auth/me', weight: 10, run: (c) => fetch(`${BASE}/auth/me`, { headers: { cookie: c } }) },
   { name: 'GET /users', weight: 5, run: (c) => fetch(`${BASE}/users?limit=50`, { headers: { cookie: c } }) },
   { name: 'GET /audit', weight: 5, run: (c) => fetch(`${BASE}/audit?limit=50`, { headers: { cookie: c } }) },
   { name: 'GET /notifications', weight: 5, run: (c) => fetch(`${BASE}/notifications`, { headers: { cookie: c } }) },
@@ -145,6 +145,11 @@ const OPS: Op[] = [
     run: (c) => fetch(`${BASE}/projects/${source.audienceProject}/execution`, { headers: { cookie: c } }),
   },
   { name: 'POST reserve + release', weight: 5, run: (c) => reserveRelease(c) },
+  {
+    name: 'GET /projects/:id/synthetic-qa',
+    weight: 5,
+    run: (c) => fetch(`${BASE}/projects/${source.audienceProject}/synthetic-qa`, { headers: { cookie: c } }),
+  },
   { name: 'POST signed webhook', weight: 5, run: () => webhook() },
   {
     name: 'PUT /settings/tenant',
@@ -297,6 +302,10 @@ const capped = await post(
   'PUT',
 );
 if (!mapped.ok || !capped.ok) throw new Error(`audience setup ${mapped.status} ${capped.status}`);
+// Phase 6: a FIXTURE SampIntel link and one project showing synthetic QA beside human sample.
+const si = await post('/sampintel/connection', { mode: 'fixture', enabled: true }, 'PUT');
+const qa = await post(`/projects/${source.audienceProject}/qa-mode`, { mode: 'both_separate', reason: 'load test' }, 'PUT');
+if (!si.ok || !qa.ok) throw new Error(`sampintel setup ${si.status} ${qa.status}`);
 
 const MIX = OPS.map((o) => `${o.weight}% ${o.name}`);
 const results: Awaited<ReturnType<typeof level>>[] = [];
