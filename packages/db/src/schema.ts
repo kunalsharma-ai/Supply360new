@@ -871,3 +871,22 @@ export const reportExports = pgTable(
     index('report_exports_status').on(t.status, t.createdAt),
   ],
 );
+
+/**
+ * A saved project setup (execution policy, allocation mode, cell criteria and caps, QA mode) that can be applied to
+ * another project. It holds MADP criteria and numbers only: no references, people or prices.
+ */
+export const setupTemplates = pgTable(
+  'setup_templates',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    name: text('name').notNull(),
+    description: text('description'),
+    sourceProjectCode: text('source_project_code'),
+    content: jsonb('content').notNull(),
+    createdBy: uuid('created_by'),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('setup_templates_name').on(t.tenantId, t.name)],
+);

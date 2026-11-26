@@ -8,3 +8,4 @@ export * from './execution.js';
 export * from './fieldwork.js';
 export * from './sampintel.js';
 export * from './intelligence.js';
+export * from './setup.js';
