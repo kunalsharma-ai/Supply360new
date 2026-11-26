@@ -28,6 +28,15 @@ const consoleErrors = [];
 page.on('console', (m) => m.type() === 'error' && consoleErrors.push(m.text()));
 
 async function axe(label) {
+  // Let entrance animations (fade and pop-in) finish, so contrast is measured on what people actually see.
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((a) => a.effect?.getComputedTiming().iterations !== Infinity)
+        .map((a) => a.finished.catch(() => {})),
+    ),
+  );
   await page.addScriptTag({ content: AXE });
   const r = await page.evaluate(async () => {
     // eslint-disable-next-line no-undef
@@ -60,7 +69,10 @@ await page.goto(`${BASE}/users`);
 await page.waitForURL(/\/login/);
 check('signed-out visit redirects to /login with next', page.url().includes('next=%2Fusers'));
 const csp = (await page.request.get(`${BASE}/login`)).headers()['content-security-policy'] ?? '';
-check('pages carry a nonce-based Content-Security-Policy', /script-src 'self' 'nonce-[^']+' 'strict-dynamic'/.test(csp) && csp.includes("frame-ancestors 'none'"));
+check(
+  'pages carry a nonce-based Content-Security-Policy',
+  /script-src 'self' 'nonce-[^']+' 'strict-dynamic'/.test(csp) && csp.includes("frame-ancestors 'none'"),
+);
 await axe('sign-in');
 await shot('01-login');
 
@@ -99,6 +111,19 @@ await page.goto(`${BASE}/`);
 await page.getByText('Integration health').waitFor();
 await page.getByText('PRX10001').first().waitFor();
 check('command centre lists the imported FIXTURE projects', (await page.getByText('FIXTURE ·').count()) >= 3);
+check(
+  'Adventure Park is the default theme',
+  (await page.evaluate(() => document.documentElement.dataset.theme)) === 'adventure',
+);
+await page.getByRole('tab', { name: /Recent activity/ }).click();
+check('dashboard tabs switch by click', await page.getByRole('tabpanel').getByText('From the audit log').isVisible());
+await page.getByRole('switch', { name: 'Motion effects' }).click();
+check(
+  'motion toggle turns effects off',
+  (await page.evaluate(() => document.documentElement.dataset.motion)) === 'off',
+);
+await page.getByRole('switch', { name: 'Motion effects' }).click();
+await page.getByRole('tab', { name: /Projects/ }).click();
 await axe('command centre');
 await shot('03-command-centre');
 
@@ -500,7 +525,11 @@ await page.goto(`${BASE}/projects`);
 await page.getByRole('link', { name: /Grocery shopper tracker Q1/ }).click();
 const card = page.locator('[data-testid=synthetic-qa-card]');
 await card.getByText('Synthetic sessions').waitFor();
-check('the project page shows the synthetic QA card, labelled and separate', (await card.getByText('Never counted as human sample', { exact: false }).count()) >= 1 && (await card.getByText('FIXTURE').count()) >= 1);
+check(
+  'the project page shows the synthetic QA card, labelled and separate',
+  (await card.getByText('Never counted as human sample', { exact: false }).count()) >= 1 &&
+    (await card.getByText('FIXTURE').count()) >= 1,
+);
 await card.scrollIntoViewIfNeeded();
 await shot('39-project-synthetic-qa');
 
@@ -508,15 +537,24 @@ await shot('39-project-synthetic-qa');
 await page.goto(`${BASE}/intelligence/delivery`);
 await page.getByRole('heading', { name: 'AI Delivery Intelligence' }).waitFor();
 await page.locator('[data-testid=delivery-row]').first().waitFor();
-await page.locator('[data-testid=delivery-row]', { hasText: 'PRX10001' }).getByRole('button', { name: 'PRX10001' }).click();
+await page
+  .locator('[data-testid=delivery-row]', { hasText: 'PRX10001' })
+  .getByRole('button', { name: 'PRX10001' })
+  .click();
 await page.locator('[data-testid=forecast-detail]').getByText('Rates behind the forecast').waitFor();
-check('the delivery forecast shows each rate with its sample and basis', (await page.locator('[data-testid=forecast-detail] tbody tr').count()) >= 3);
+check(
+  'the delivery forecast shows each rate with its sample and basis',
+  (await page.locator('[data-testid=forecast-detail] tbody tr').count()) >= 3,
+);
 await axe('delivery intelligence');
 await shot('40-delivery');
 await page.goto(`${BASE}/intelligence/audience`);
 await page.getByRole('heading', { name: 'AI Audience Intelligence' }).waitFor();
 await page.locator('[data-testid=perf-row]').first().waitFor();
-check('audience intelligence lists panels with denominators', (await page.locator('[data-testid=perf-row]').count()) >= 2);
+check(
+  'audience intelligence lists panels with denominators',
+  (await page.locator('[data-testid=perf-row]').count()) >= 2,
+);
 await axe('audience intelligence');
 await shot('41-audience-intel');
 
@@ -530,7 +568,10 @@ const askCopilot = async (q) => {
   return page.locator('[data-testid=copilot-turn]').nth(n);
 };
 const t1 = await askCopilot('How many women in the UK are on Turn2Opinion?');
-check('the Copilot answers an audience count from a typed query', /unique people match/.test(await t1.locator('[data-testid=copilot-answer]').textContent()));
+check(
+  'the Copilot answers an audience count from a typed query',
+  /unique people match/.test(await t1.locator('[data-testid=copilot-answer]').textContent()),
+);
 const t2 = await askCopilot('SELECT * FROM invitations');
 check('the Copilot refuses SQL', (await t2.getByText('refused').count()) === 1);
 await askCopilot('Is PRX10001 at risk?');
@@ -554,7 +595,10 @@ const dl = await page.evaluate(async () => {
   const r = await fetch(`/api/v1/reports/exports/${l.items.find((x) => x.kind === 'quotas').id}/download`);
   return { type: r.headers.get('content-type'), text: await r.text() };
 });
-check('a quotas CSV export is built and downloads', dl.type.startsWith('text/csv') && dl.text.includes('project,country,group,cell'));
+check(
+  'a quotas CSV export is built and downloads',
+  dl.type.startsWith('text/csv') && dl.text.includes('project,country,group,cell'),
+);
 await page.mouse.move(5, 5);
 await page.locator('[data-sonner-toast]').first().waitFor({ state: 'detached', timeout: 15000 });
 await axe('reports');
@@ -613,7 +657,7 @@ check(
 await done.close();
 
 // 8. Themes
-for (const [i, t] of ['arctic', 'violet', 'emerald', 'midnight', 'glass'].entries()) {
+for (const [i, t] of ['arctic', 'violet', 'emerald', 'midnight', 'glass', 'adventure'].entries()) {
   await page.evaluate((id) => localStorage.setItem('s360-theme', id), t);
   await page.goto(`${BASE}/`);
   await page.getByText('Integration health').waitFor();

@@ -20,8 +20,15 @@ const blocks = [...css.matchAll(/\[data-theme='(\w+)'\]\s*\{([^}]+)\}/g)].map(([
 });
 
 describe('theme tokens', () => {
-  it('defines all five themes', () =>
-    expect(blocks.map((b) => b.name).sort()).toEqual(['arctic', 'emerald', 'glass', 'midnight', 'violet']));
+  it('defines all six themes', () =>
+    expect(blocks.map((b) => b.name).sort()).toEqual([
+      'adventure',
+      'arctic',
+      'emerald',
+      'glass',
+      'midnight',
+      'violet',
+    ]));
   for (const { name, v } of blocks) {
     it(`${name}: body and muted text meet AA on every surface`, () => {
       for (const s of ['bg', 'surface', 'surface-2']) {
