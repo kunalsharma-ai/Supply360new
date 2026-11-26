@@ -71,6 +71,20 @@
       "when": 1795674042459,
       "tag": "0009_fieldwork_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1795684538766,
+      "tag": "0010_sampintel",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1795684539564,
+      "tag": "0011_sampintel_rls",
+      "breakpoints": true
     }
   ]
 }

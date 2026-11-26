@@ -33,6 +33,7 @@ import { SettingsController } from './settings/settings.controller.js';
 import { UsersController } from './users/users.controller.js';
 import { UsersService } from './users/users.service.js';
 
+import { SampIntelController, SampIntelService } from './sampintel/sampintel.js';
 @Module({})
 export class AppModule {
   static forRoot(env: Env): DynamicModule {
@@ -46,6 +47,7 @@ export class AppModule {
         { module: DbModule, providers: [{ provide: ENV, useValue: env }], exports: [ENV] },
       ],
       providers: [
+        SampIntelService,
         { provide: ENV, useValue: env },
         AuditService,
         AuthService,
@@ -63,6 +65,7 @@ export class AppModule {
       ],
       exports: [ENV],
       controllers: [
+        SampIntelController,
         HealthController,
         OpenApiController,
         AuthController,
