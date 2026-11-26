@@ -202,3 +202,18 @@ fieldwork reads (Phase 5).
   outcomes are never reinvited. MADP still has no send endpoint, so LIVE reinvites stop safely as unavailable.
 - **FIXTURE simulators** (outside production): play a respondent (opens their link through the real router, then a
   signed callback through the real verification path) and play the client approving or rejecting completes.
+
+## Phase 8: production readiness
+
+- **Start-up guards:** with `NODE_ENV=production` the API refuses to start on unsafe settings and lists each one
+  (insecure cookies, http origins, example values, the owner database role, load-test rate limits, a missing
+  `PARTICIPATION_TOKEN_SECRET`).
+- **Health and metrics:** `/api/v1/health/live`, `/api/v1/health/ready` (503 without the database), and Prometheus
+  metrics at `/api/v1/metrics` behind `METRICS_TOKEN`. JSON logs in production.
+- **Web security headers:** per-request nonce Content-Security-Policy (`src/proxy.ts`), HSTS over https.
+- **Data:** `scripts/backup.sh` and `scripts/restore.sh` (restore only into an empty database). Field encryption
+  key rotation with `FIELD_ENCRYPTION_KEY_PREVIOUS` and `pnpm --filter @s360/api rotate:reseal`.
+- **Release:** pushing a `vX.Y.Z` tag builds and pushes images with SBOM and provenance. Nothing deploys
+  automatically.
+- **Docs:** [runbooks](docs/runbooks/README.md) and [production reports](docs/production/readiness-checklist.md)
+  (readiness checklist, security review, accessibility, performance).

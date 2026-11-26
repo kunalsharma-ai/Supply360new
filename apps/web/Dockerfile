@@ -11,6 +11,8 @@ ENV S360_API_URL=$S360_API_URL
 RUN pnpm install --frozen-lockfile --filter @s360/web... && pnpm --filter @s360/web... build
 
 FROM node:26.13.1-bookworm-slim
+ARG S360_VERSION=dev
+ENV S360_VERSION=$S360_VERSION
 ENV NODE_ENV=production HOSTNAME=0.0.0.0 PORT=3000
 WORKDIR /app
 COPY --from=build /repo/apps/web/.next/standalone ./

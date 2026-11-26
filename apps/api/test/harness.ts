@@ -57,6 +57,7 @@ export async function startHarness(): Promise<Harness> {
     LOGIN_RATE_LIMIT: '1000',
     SOURCE_POLL_SECONDS: '0',
     DISPATCH_TICK_SECONDS: '0',
+    METRICS_TOKEN: 'test-metrics-token-0123456789abcdef0123',
     DATABASE_URL: appUrl,
     DATABASE_ADMIN_URL: adminUrl,
     SESSION_SECRET: randomBytes(32).toString('hex'),

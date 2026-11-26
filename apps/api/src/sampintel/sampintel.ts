@@ -9,7 +9,7 @@ import { Ctx, RequirePermissions } from '../common/decorators.js';
 import { problem } from '../common/problem.js';
 import { ZodPipe } from '../common/zod.pipe.js';
 import { ENV, type Env } from '../config.js';
-import { Sealer } from '../crypto/sealer.js';
+import { sealerFor, Sealer } from '../crypto/sealer.js';
 import { DB } from '../db/db.module.js';
 
 type Conn = typeof sampintelConnections.$inferSelect;
@@ -38,7 +38,7 @@ export class SampIntelService {
     @Inject(ENV) private readonly env: Env,
     private readonly audit: AuditService,
   ) {
-    this.sealer = new Sealer(env.FIELD_ENCRYPTION_KEY);
+    this.sealer = sealerFor(env);
   }
 
   private async conn(tx: Tx): Promise<Conn | undefined> {

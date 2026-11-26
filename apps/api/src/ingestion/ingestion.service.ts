@@ -16,7 +16,7 @@ import type { Actor } from '../audit/audit.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { problem } from '../common/problem.js';
 import { ENV, type Env } from '../config.js';
-import { Sealer } from '../crypto/sealer.js';
+import { sealerFor, Sealer } from '../crypto/sealer.js';
 import { DB } from '../db/db.module.js';
 import { SourceError, type ProjectSource } from './adapter.js';
 import { applySourceStatus } from './lifecycle.js';
@@ -71,7 +71,7 @@ export class IngestionService {
     @Inject(ENV) private readonly env: Env,
     private readonly audit: AuditService,
   ) {
-    this.sealer = new Sealer(env.FIELD_ENCRYPTION_KEY);
+    this.sealer = sealerFor(env);
   }
 
   sourceFor(conn: Connection, timeoutMs?: number): ProjectSource {

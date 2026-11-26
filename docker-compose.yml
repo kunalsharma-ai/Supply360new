@@ -37,6 +37,11 @@ services:
       DATABASE_URL: postgres://s360_api:${S360_API_DB_PASSWORD:?set S360_API_DB_PASSWORD}@postgres:5432/supply360
       DATABASE_ADMIN_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/supply360
     ports: ['4000:4000']
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://localhost:4000/api/v1/health/ready').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
     depends_on:
       migrate: { condition: service_completed_successfully }
     profiles: ['app']
@@ -47,7 +52,7 @@ services:
       dockerfile: apps/web/Dockerfile
       args: { S360_API_URL: 'http://api:4000' }
     ports: ['3000:3000']
-    depends_on: [api]
+    depends_on: { api: { condition: service_healthy } }
     profiles: ['app']
 
 volumes:

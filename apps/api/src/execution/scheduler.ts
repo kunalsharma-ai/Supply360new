@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 import type pg from 'pg';
 import { ENV, type Env } from '../config.js';
 import { DB } from '../db/db.module.js';
+import { schedulerDuration, schedulerLastSuccess, schedulerRuns } from '../metrics.js';
 import { FieldworkService } from '../fieldwork/fieldwork.service.js';
 import { IntelligenceService } from '../intelligence/intelligence.service.js';
 import { ReportsService } from '../reports/reports.service.js';
@@ -50,6 +51,8 @@ export class DispatchScheduler implements OnApplicationBootstrap, OnApplicationS
     try {
       const { rows } = await client.query<{ ok: boolean }>('select pg_try_advisory_lock($1) as ok', [LOCK]);
       if (!rows[0]?.ok) return;
+      const stop = schedulerDuration.startTimer();
+      let tenantErrors = 0;
       try {
         for (const t of await this.db.select().from(tenants).where(eq(tenants.status, 'active'))) {
           try {
@@ -59,13 +62,18 @@ export class DispatchScheduler implements OnApplicationBootstrap, OnApplicationS
             await this.intelligence.tick(t.id);
             await this.reports.tick(t.id);
           } catch (e) {
+            tenantErrors++;
             this.log.error(`${t.slug}: ${(e as Error).message}`);
           }
         }
+        schedulerRuns.inc({ result: tenantErrors ? 'tenant_error' : 'ok' });
+        if (!tenantErrors) schedulerLastSuccess.setToCurrentTime();
       } finally {
+        stop();
         await client.query('select pg_advisory_unlock($1)', [LOCK]);
       }
     } catch (e) {
+      schedulerRuns.inc({ result: 'failed' });
       this.log.error(`tick failed: ${(e as Error).message}`);
     } finally {
       client.release();

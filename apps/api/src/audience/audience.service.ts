@@ -18,7 +18,7 @@ import { actorOf, AuditService } from '../audit/audit.service.js';
 import type { RequestContext } from '../common/context.js';
 import { problem } from '../common/problem.js';
 import { ENV, type Env } from '../config.js';
-import { Sealer } from '../crypto/sealer.js';
+import { sealerFor, Sealer } from '../crypto/sealer.js';
 import { DB } from '../db/db.module.js';
 import { FixtureMadp } from './madp/fixture.js';
 import { LiveMadp } from './madp/live.js';
@@ -43,7 +43,7 @@ export class AudienceService {
     @Inject(ENV) private readonly env: Env,
     private readonly audit: AuditService,
   ) {
-    this.sealer = new Sealer(env.FIELD_ENCRYPTION_KEY);
+    this.sealer = sealerFor(env);
   }
 
   sourceFor(c: AudienceConnection): AudienceSource {

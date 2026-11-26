@@ -11,6 +11,7 @@
     "test": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
     "tenant:create": "node --env-file-if-exists=../../.env dist/scripts/create-tenant.js",
+    "rotate:reseal": "node --env-file-if-exists=../../.env dist/scripts/reseal.js",
     "seed:demo": "node --env-file-if-exists=../../.env dist/scripts/seed-demo.js",
     "load-test": "node --env-file-if-exists=../../.env dist/scripts/load-test.js"
   },
@@ -29,6 +30,7 @@
     "jose": "6.2.18",
     "otpauth": "9.6.0",
     "pg": "8.23.1",
+    "prom-client": "15.1.3",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2",
     "zod": "4.6.7"

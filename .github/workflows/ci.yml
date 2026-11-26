@@ -50,6 +50,17 @@ jobs:
           pnpm --filter @s360/web exec playwright install --with-deps chromium
           E2E_PASSWORD=$S360_DEMO_PASSWORD pnpm --filter @s360/web e2e
 
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - run: npm i -g pnpm@12.23.0
+      - name: Dependency advisories (moderate and above fail the build)
+        run: pnpm audit --audit-level moderate
+
   images:
     runs-on: ubuntu-latest
     steps:
