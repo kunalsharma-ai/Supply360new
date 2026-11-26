@@ -113,6 +113,20 @@
       "when": 1795717049064,
       "tag": "0015_setup_templates_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1795717336679,
+      "tag": "0016_alerts",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1795717337179,
+      "tag": "0017_alerts_rls",
+      "breakpoints": true
     }
   ]
 }

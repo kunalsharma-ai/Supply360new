@@ -890,3 +890,72 @@ export const setupTemplates = pgTable(
   },
   (t) => [uniqueIndex('setup_templates_name').on(t.tenantId, t.name)],
 );
+
+/**
+ * Where a tenant's alerts go and which ones. Set on the Alerts screen, never in environment files. The SMTP password
+ * and the chat webhook address are sealed, and both hosts must be public.
+ */
+export const alertSettings = pgTable('alert_settings', {
+  tenantId: uuid('tenant_id')
+    .primaryKey()
+    .references(() => tenants.id, { onDelete: 'restrict' }),
+  emailEnabled: boolean('email_enabled').notNull().default(false),
+  smtpHost: text('smtp_host'),
+  smtpPort: integer('smtp_port').notNull().default(587),
+  /** true: TLS from the start (port 465); false: STARTTLS, which is required. */
+  smtpSecure: boolean('smtp_secure').notNull().default(false),
+  smtpUser: text('smtp_user'),
+  smtpPasswordSealed: text('smtp_password_sealed'),
+  fromAddress: text('from_address'),
+  recipients: jsonb('recipients').notNull().default([]),
+  webhookEnabled: boolean('webhook_enabled').notNull().default(false),
+  webhookUrlSealed: text('webhook_url_sealed'),
+  /** Alert groups to send: delivery, automation, quota_full, ir_drop, other. */
+  categories: jsonb('categories').notNull().default(['delivery', 'automation', 'quota_full', 'ir_drop']),
+  minSeverity: text('min_severity').notNull().default('warning'),
+  irDropPoints: integer('ir_drop_points').notNull().default(15),
+  digestEnabled: boolean('digest_enabled').notNull().default(false),
+  digestHour: integer('digest_hour').notNull().default(9),
+  digestTimezone: text('digest_timezone').notNull().default('Asia/Kolkata'),
+  /** Local date of the last digest sent, so it goes once a day. */
+  lastDigestOn: text('last_digest_on'),
+  /** Notifications created before this are never sent out, so switching alerts on does not flood old news. */
+  sendSince: timestamp('send_since', { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: uuid('updated_by'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** One row per notification and channel, so an alert is sent at most once there and failures are visible. */
+export const alertDeliveries = pgTable(
+  'alert_deliveries',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    notificationId: uuid('notification_id').references(() => notifications.id, { onDelete: 'cascade' }),
+    /** email | webhook */
+    channel: text('channel').notNull(),
+    /** alert | digest | test */
+    kind: text('kind').notNull(),
+    /** sent | failed | skipped */
+    status: text('status').notNull(),
+    attempts: integer('attempts').notNull().default(1),
+    error: text('error'),
+    subject: text('subject').notNull(),
+    at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('alert_deliveries_once').on(t.notificationId, t.channel),
+    index('alert_deliveries_tenant_at').on(t.tenantId, t.at.desc()),
+  ],
+);
+
+/** Conditions already alerted on (a cell that filled, an IR drop on a day), so each is raised once. */
+export const alertMarks = pgTable(
+  'alert_marks',
+  {
+    tenantId: tenantId(),
+    key: text('key').notNull(),
+    at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('alert_marks_key').on(t.tenantId, t.key)],
+);

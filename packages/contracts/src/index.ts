@@ -9,3 +9,4 @@ export * from './fieldwork.js';
 export * from './sampintel.js';
 export * from './intelligence.js';
 export * from './setup.js';
+export * from './alerts.js';
