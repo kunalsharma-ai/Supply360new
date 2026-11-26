@@ -7,7 +7,7 @@ import { AuditService } from '../audit/audit.service.js';
 import { ENV, type Env } from '../config.js';
 import type { RequestContext } from '../common/context.js';
 import { problem } from '../common/problem.js';
-import { Sealer } from '../crypto/sealer.js';
+import { sealerFor, Sealer } from '../crypto/sealer.js';
 import { DB } from '../db/db.module.js';
 import { SessionTokens } from './session-token.js';
 import { newTotpSecret, otpauthUri, verifyTotp } from './totp.js';
@@ -40,7 +40,7 @@ export class AuthService {
     private readonly audit: AuditService,
   ) {
     this.tokens = new SessionTokens(env.SESSION_SECRET);
-    this.sealer = new Sealer(env.FIELD_ENCRYPTION_KEY);
+    this.sealer = sealerFor(env);
   }
 
   static hashPassword(p: string) {

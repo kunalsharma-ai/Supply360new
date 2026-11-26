@@ -9,6 +9,8 @@ RUN pnpm install --frozen-lockfile --filter @s360/api... && pnpm --filter @s360/
 RUN pnpm --filter @s360/api deploy --prod /out && cp -r packages/db/migrations /out/migrations
 
 FROM node:26.13.1-bookworm-slim
+ARG S360_VERSION=dev
+ENV S360_VERSION=$S360_VERSION
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build /out ./

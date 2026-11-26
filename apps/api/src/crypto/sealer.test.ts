@@ -13,3 +13,21 @@ describe('Sealer', () => {
     expect(() => s.open(parts.join('.'), 'c')).toThrow();
   });
 });
+
+describe('key rotation', () => {
+  const oldKey = randomBytes(32).toString('base64');
+  const newKey = randomBytes(32).toString('base64');
+  it('opens values sealed with the previous key and seals with the new one', () => {
+    const sealed = new Sealer(oldKey).seal('whsec_x', 'ctx');
+    const rotating = new Sealer(newKey, oldKey);
+    expect(rotating.openWithKey(sealed, 'ctx')).toEqual({ plain: 'whsec_x', keyIndex: 1 });
+    const resealed = rotating.seal('whsec_x', 'ctx');
+    expect(rotating.openWithKey(resealed, 'ctx').keyIndex).toBe(0);
+    expect(new Sealer(newKey).open(resealed, 'ctx')).toBe('whsec_x');
+  });
+  it('still refuses a wrong context or an unknown key', () => {
+    const sealed = new Sealer(oldKey).seal('s', 'ctx');
+    expect(() => new Sealer(newKey, oldKey).open(sealed, 'other')).toThrow();
+    expect(() => new Sealer(newKey).open(sealed, 'ctx')).toThrow();
+  });
+});

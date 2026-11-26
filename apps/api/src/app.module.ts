@@ -29,6 +29,7 @@ import { S2sController } from './fieldwork/s2s.controller.js';
 import { HealthController } from './health/health.controller.js';
 import { NotificationsController } from './notifications/notifications.controller.js';
 import { OpenApiController } from './openapi.js';
+import { MetricsController } from './metrics.js';
 import { SettingsController } from './settings/settings.controller.js';
 import { UsersController } from './users/users.controller.js';
 import { UsersService } from './users/users.service.js';
@@ -79,6 +80,7 @@ export class AppModule {
         ReportsController,
         CopilotController,
         HealthController,
+        MetricsController,
         OpenApiController,
         AuthController,
         UsersController,

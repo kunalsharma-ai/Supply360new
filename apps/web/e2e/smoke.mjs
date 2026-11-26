@@ -54,9 +54,13 @@ process.on('uncaughtException', async (e) => {
 });
 
 // 1. Unauthenticated visit goes to sign-in
+const cspViolations = [];
+page.on('console', (m) => /Content Security Policy/i.test(m.text()) && cspViolations.push(m.text()));
 await page.goto(`${BASE}/users`);
 await page.waitForURL(/\/login/);
 check('signed-out visit redirects to /login with next', page.url().includes('next=%2Fusers'));
+const csp = (await page.request.get(`${BASE}/login`)).headers()['content-security-policy'] ?? '';
+check('pages carry a nonce-based Content-Security-Policy', /script-src 'self' 'nonce-[^']+' 'strict-dynamic'/.test(csp) && csp.includes("frame-ancestors 'none'"));
 await axe('sign-in');
 await shot('01-login');
 
@@ -603,6 +607,7 @@ check(
   consoleErrors.filter((e) => !e.includes('401')).length === 0,
   consoleErrors.slice(0, 3).join(' | '),
 );
+check('no Content-Security-Policy violations', cspViolations.length === 0, cspViolations.slice(0, 2).join(' | '));
 await browser.close();
 const failed = results.filter((r) => !r.ok).length;
 console.log(`\n${results.length - failed}/${results.length} checks passed`);

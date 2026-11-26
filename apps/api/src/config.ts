@@ -13,6 +13,11 @@ const Env = z.object({
   FIELD_ENCRYPTION_KEY: z
     .string()
     .refine((v) => Buffer.from(v, 'base64').length === 32, 'FIELD_ENCRYPTION_KEY must be 32 bytes, base64'),
+  /** During a key rotation only: the old key, so values sealed with it still open until `rotate:reseal` has run. */
+  FIELD_ENCRYPTION_KEY_PREVIOUS: z
+    .string()
+    .refine((v) => Buffer.from(v, 'base64').length === 32, 'FIELD_ENCRYPTION_KEY_PREVIOUS must be 32 bytes, base64')
+    .optional(),
   WEB_ORIGIN: z.string().url().default('http://localhost:3000'),
   /** Sign-in and MFA attempts per minute per client address. */
   LOGIN_RATE_LIMIT: z.coerce.number().int().min(1).max(10_000).default(10),
@@ -32,6 +37,10 @@ const Env = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((v) => v === 'true'),
+  /** Bearer token for GET /api/v1/metrics (Prometheus). Unset turns the endpoint off. */
+  METRICS_TOKEN: z.string().min(32, 'METRICS_TOKEN must be at least 32 characters').optional(),
+  /** `json` writes one JSON object per log line (default in production); `text` is for local work. */
+  LOG_FORMAT: z.enum(['json', 'text']).optional(),
 });
 export type Env = z.infer<typeof Env>;
 
@@ -41,10 +50,31 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     const lines = parsed.error.issues.map((i) => `  ${i.path.join('.')}: ${i.message}`).join('\n');
     throw new Error(`Invalid configuration:\n${lines}`);
   }
-  if (parsed.data.NODE_ENV === 'production' && !parsed.data.COOKIE_SECURE) {
-    throw new Error('COOKIE_SECURE must be true in production');
+  if (parsed.data.NODE_ENV === 'production') {
+    const problems = productionProblems(parsed.data);
+    if (problems.length) throw new Error(`Refusing to start in production:\n${problems.map((p) => `  - ${p}`).join('\n')}`);
   }
   return parsed.data;
+}
+
+/** Settings that are fine on a laptop but unsafe in production. The API refuses to start with any of them. */
+export function productionProblems(e: Env): string[] {
+  const out: string[] = [];
+  const https = (u: string) => new URL(u).protocol === 'https:';
+  if (!e.COOKIE_SECURE) out.push('COOKIE_SECURE must be true');
+  if (!https(e.WEB_ORIGIN)) out.push('WEB_ORIGIN must be https');
+  if (e.PUBLIC_BASE_URL && !https(e.PUBLIC_BASE_URL)) out.push('PUBLIC_BASE_URL must be https');
+  for (const k of ['SESSION_SECRET', 'FIELD_ENCRYPTION_KEY', 'DATABASE_URL', 'PARTICIPATION_TOKEN_SECRET', 'METRICS_TOKEN'] as const)
+    if (String(e[k] ?? '').includes('CHANGE-ME')) out.push(`${k} still holds the example value`);
+  const dbUser = decodeURIComponent(new URL(e.DATABASE_URL).username);
+  // The owner role bypasses row-level security; requests must run as the s360_app member role.
+  if (dbUser === 'postgres' || (e.DATABASE_ADMIN_URL && dbUser === decodeURIComponent(new URL(e.DATABASE_ADMIN_URL).username)))
+    out.push('DATABASE_URL must use the API login role, not the owner role');
+  // Without it, participation links are signed with SESSION_SECRET and rotating that would break every sent link.
+  if (!e.PARTICIPATION_TOKEN_SECRET) out.push('PARTICIPATION_TOKEN_SECRET must be set, separate from SESSION_SECRET');
+  if (e.FIELD_ENCRYPTION_KEY_PREVIOUS === e.FIELD_ENCRYPTION_KEY) out.push('FIELD_ENCRYPTION_KEY_PREVIOUS must differ from FIELD_ENCRYPTION_KEY');
+  if (e.LOGIN_RATE_LIMIT > 30) out.push('LOGIN_RATE_LIMIT above 30 a minute is a load-test setting');
+  return out;
 }
 
 export const ENV = Symbol('ENV');

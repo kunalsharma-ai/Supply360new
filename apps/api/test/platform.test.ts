@@ -18,6 +18,23 @@ describe('health and openapi', () => {
     expect(r.status).toBe(200);
     expect(r.body.database).toBe('up');
   });
+  it('separates liveness from readiness', async () => {
+    const live = await h.http.get('/api/v1/health/live');
+    expect(live.status).toBe(200);
+    expect(live.body.status).toBe('ok');
+    const ready = await h.http.get('/api/v1/health/ready');
+    expect(ready.status).toBe(200);
+    expect(ready.body.database).toBe('up');
+  });
+  it('serves Prometheus metrics only with the metrics token', async () => {
+    expect((await h.http.get('/api/v1/metrics')).status).toBe(401);
+    expect((await h.http.get('/api/v1/metrics').set('Authorization', 'Bearer wrong-token')).status).toBe(401);
+    const r = await h.http.get('/api/v1/metrics').set('Authorization', 'Bearer test-metrics-token-0123456789abcdef0123');
+    expect(r.status).toBe(200);
+    expect(r.text).toContain('s360_http_requests_total');
+    expect(r.text).toContain('route="/api/v1/health/live"');
+    expect(r.text).not.toMatch(/route="[^"]*[0-9a-f]{8}-[0-9a-f]{4}/);
+  });
   it('serves an OpenAPI document generated from the contracts', async () => {
     const r = await h.http.get('/api/v1/openapi.json');
     expect(r.body.openapi).toBe('3.0.3');
