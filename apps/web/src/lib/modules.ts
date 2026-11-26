@@ -26,7 +26,7 @@ export interface ModuleDef {
 }
 
 /** The last delivered phase. Phases up to and including it show as done on the status pages. */
-export const CURRENT_PHASE = 2;
+export const CURRENT_PHASE = 3;
 
 export const MODULES: ModuleDef[] = [
   {
@@ -79,6 +79,7 @@ export const MODULES: ModuleDef[] = [
     group: 'Integrations',
     href: '/integrations/madp',
     phase: 3,
+    ready: true,
     permission: 'integrations.read',
     summary: 'Signed service API for counts, selection, consent and participation events.',
   },
@@ -100,6 +101,7 @@ export const MODULES: ModuleDef[] = [
     group: 'Audience',
     href: '/audience/finder',
     phase: 3,
+    ready: true,
     permission: 'audience.read',
     summary: 'Unique people and panel memberships by geography.',
   },
@@ -110,6 +112,7 @@ export const MODULES: ModuleDef[] = [
     group: 'Audience',
     href: '/audience/filter',
     phase: 3,
+    ready: true,
     permission: 'audience.read',
     summary: 'Metadata-driven nested filters from MADP attributes.',
   },
@@ -120,6 +123,7 @@ export const MODULES: ModuleDef[] = [
     group: 'Audience',
     href: '/audience/segments',
     phase: 3,
+    ready: true,
     permission: 'audience.read',
     summary: 'Saved templates, reusable segments and selection snapshots.',
   },
@@ -150,6 +154,7 @@ export const MODULES: ModuleDef[] = [
     group: 'Audience',
     href: '/allocation',
     phase: 3,
+    ready: true,
     permission: 'allocation.manage',
     summary: 'Manual, equal, preferred, exclusive and recommended allocation.',
   },
@@ -160,6 +165,7 @@ export const MODULES: ModuleDef[] = [
     group: 'Audience',
     href: '/quotas',
     phase: 3,
+    ready: true,
     permission: 'projects.read',
     summary: 'Quota matrix with atomic reservations.',
   },

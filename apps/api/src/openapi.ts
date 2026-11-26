@@ -1,5 +1,11 @@
 import { Controller, Get } from '@nestjs/common';
 import {
+  AllocationUpdate,
+  AudienceConnectionCreate,
+  AudienceCriteria,
+  CellMapping,
+  ReserveRequest,
+  SegmentCreate,
   EntryLinkApproval,
   LifecycleRequest,
   SourceConnectionCreate,
@@ -88,6 +94,34 @@ export function buildOpenApi() {
       '/projects/{id}/markets/{cc}/entry-link': {
         put: op("Approve Supply360's SampTrek entry link for a market", 'projects.manage', EntryLinkApproval),
       },
+      '/projects/{id}/quotas': {
+        get: op('Quota cells with mapping, allocation, cap, held counts and reservations', 'projects.read'),
+      },
+      '/projects/{id}/quotas/{cellId}/mapping': {
+        put: op('Map a SampTrek quota cell to MADP criteria (one panel)', 'quotas.manage', CellMapping),
+      },
+      '/projects/{id}/quotas/{cellId}/feasibility': { post: op('MADP counts for a cell', 'audience.read') },
+      '/projects/{id}/quotas/{cellId}/reserve': {
+        post: op('Select and reserve people in MADP, never past the cell cap', 'audience.select', ReserveRequest),
+      },
+      '/projects/{id}/reservations/{rid}/release': { post: op('Release a reservation', 'audience.select') },
+      '/projects/{id}/allocation': {
+        put: op('Allocation mode, per-cell targets and caps', 'allocation.manage', AllocationUpdate),
+      },
+      '/audience/connections': {
+        get: op('MADP connections', 'integrations.read'),
+        post: op('Add a MADP connection (FIXTURE or LIVE)', 'integrations.manage', AudienceConnectionCreate),
+      },
+      '/audience/connections/{id}': { patch: op('Turn a MADP connection on or off', 'integrations.manage') },
+      '/audience/connections/{id}/check': { post: op('Signed round trip to MADP', 'integrations.manage') },
+      '/audience/attributes': { get: op('MADP attributes Supply360 may filter on', 'audience.read') },
+      '/audience/counts': { post: op('Unique people and memberships from MADP', 'audience.read', AudienceCriteria) },
+      '/audience/segments': {
+        get: op('Saved segments', 'audience.read'),
+        post: op('Save a segment', 'audience.select', SegmentCreate),
+      },
+      '/audience/segments/{id}': { delete: op('Delete a segment', 'audience.select') },
+      '/audience/selections': { get: op('Selection snapshots, newest first', 'audience.read') },
       '/r/{tenant}/{project}/{outcome}': {
         get: { ...op('Respondent redirect landing (302 to the Supply360 thank-you page)', null), security: [] },
       },

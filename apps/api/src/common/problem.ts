@@ -23,4 +23,6 @@ export const problem = {
   notFound: (detail = 'Not found') => new ProblemException(HttpStatus.NOT_FOUND, 'not_found', 'Not found', detail),
   conflict: (code: string, detail: string) => new ProblemException(HttpStatus.CONFLICT, code, 'Conflict', detail),
   locked: (detail: string) => new ProblemException(HttpStatus.LOCKED, 'account_locked', 'Locked', detail),
+  badGateway: (code: string, detail: string) =>
+    new ProblemException(HttpStatus.BAD_GATEWAY, code, 'Upstream service failed', detail),
 };

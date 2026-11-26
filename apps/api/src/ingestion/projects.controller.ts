@@ -5,6 +5,7 @@ import {
   LifecycleRequest,
   OutcomeStatus,
   outcomeSlug,
+  type LaunchCheck,
   type LifecycleAction,
 } from '@s360/contracts';
 import {
@@ -26,6 +27,7 @@ import { problem } from '../common/problem.js';
 import { ZodPipe } from '../common/zod.pipe.js';
 import { ENV, type Env } from '../config.js';
 import { DB } from '../db/db.module.js';
+import { audienceChecks, cellStates } from '../audience/quotas.js';
 import { launchChecks } from './launch.js';
 import { dispatchAllowed, marketDispatchAllowed, RULES, transition } from './lifecycle.js';
 import { redirectPath } from './redirect.controller.js';
@@ -117,7 +119,8 @@ export class ProjectsController {
       .from(projectMarkets)
       .where(eq(projectMarkets.projectId, id))
       .orderBy(asc(projectMarkets.countryCode));
-    return { p, ms: ms.filter((m) => m.sourceStatus !== 'REMOVED') };
+    const live = ms.filter((m) => m.sourceStatus !== 'REMOVED');
+    return { p, ms: live, audience: audienceChecks(live, await cellStates(tx, id, live)) };
   }
 
   private detail(
@@ -126,8 +129,9 @@ export class ProjectsController {
     ms: MarketRow[],
     hits: { outcome: string; n: number }[],
     mode: string,
+    audience: LaunchCheck[],
   ) {
-    const checks = launchChecks(p, ms);
+    const checks = launchChecks(p, ms, audience);
     const base = this.env.PUBLIC_BASE_URL ?? this.env.WEB_ORIGIN;
     return {
       ...this.summary(p),
@@ -166,7 +170,7 @@ export class ProjectsController {
   @RequirePermissions('projects.read')
   get(@Ctx() ctx: RequestContext, @Param('id', ParseUUIDPipe) id: string) {
     return withTenant(this.db, ctx.tenantId, async (tx) => {
-      const { p, ms } = await this.load(tx, id);
+      const { p, ms, audience } = await this.load(tx, id);
       const hits = await tx
         .select({ outcome: redirectHits.outcome, n: count() })
         .from(redirectHits)
@@ -176,7 +180,7 @@ export class ProjectsController {
         .select({ mode: sourceConnections.mode })
         .from(sourceConnections)
         .where(eq(sourceConnections.id, p.connectionId));
-      return this.detail(ctx, p, ms, hits, c?.mode ?? 'fixture');
+      return this.detail(ctx, p, ms, hits, c?.mode ?? 'fixture', audience);
     });
   }
 
@@ -213,8 +217,8 @@ export class ProjectsController {
     @Body(new ZodPipe(LifecycleRequest)) body: z.infer<typeof LifecycleRequest>,
   ) {
     return withTenant(this.db, ctx.tenantId, async (tx) => {
-      const { p, ms } = await this.load(tx, id, true);
-      const t = transition(p, body.action, ctx.permissions, launchChecks(p, ms));
+      const { p, ms, audience } = await this.load(tx, id, true);
+      const t = transition(p, body.action, ctx.permissions, launchChecks(p, ms, audience));
       if (!t.ok) {
         if (t.code === 'permission_denied') throw problem.forbidden('permission_denied', t.detail);
         throw problem.conflict(t.code, t.detail);

@@ -45,6 +45,13 @@ async function axe(label) {
   check(`axe: no serious or critical issues on ${label}`, r.length === 0, r.join(', '));
 }
 const shot = (name) => SHOTS && page.screenshot({ path: `${SHOTS}/${name}.png` });
+// A step that times out leaves a screenshot and the console errors behind, so the failure can be read.
+process.on('uncaughtException', async (e) => {
+  console.error(e);
+  console.error('Console errors:', consoleErrors.slice(-5));
+  await page.screenshot({ path: `${SHOTS ?? '.'}/failure.png` }).catch(() => {});
+  process.exit(1);
+});
 
 // 1. Unauthenticated visit goes to sign-in
 await page.goto(`${BASE}/users`);
@@ -123,8 +130,8 @@ await page.goto(`${BASE}/security`);
 await page.getByText('Controls').first().waitFor();
 await axe('security');
 await shot('07-security');
-await page.goto(`${BASE}/audience/filter`);
-await page.getByText('Arrives in Phase 3').waitFor();
+await page.goto(`${BASE}/invitations`);
+await page.getByText('Arrives in Phase 4').waitFor();
 check('a module not built yet shows its phase, not a mock', true);
 await shot('08-planned-module');
 
@@ -155,17 +162,107 @@ for (const cc of ['GB', 'US']) {
   await page.getByRole('dialog').waitFor({ state: 'hidden' });
 }
 await page.getByText('Needs approval').waitFor({ state: 'detached' });
-for (const [action, label] of [
-  ['Mark ready', 'Ready to launch'],
-  ['Launch', 'Live'],
-]) {
+const lifecycleAct = async (action, label) => {
   await page.getByRole('toolbar').getByRole('button', { name: action }).click();
   await page.fill('#reason', `E2E ${action.toLowerCase()}`);
   await page.getByRole('dialog').getByRole('button', { name: action }).click();
   await page.getByRole('dialog').waitFor({ state: 'hidden' });
   await page.getByText(label, { exact: true }).first().waitFor();
+};
+await lifecycleAct('Mark ready', 'Ready to launch');
+check(
+  'Launch waits for quota mapping and audience',
+  await page.getByRole('toolbar').getByRole('button', { name: 'Launch' }).isDisabled(),
+);
+const projectUrl = page.url();
+
+// 7c. Phase 3: audience from MADP (FIXTURE), quota mapping, allocation and reservations
+await page.goto(`${BASE}/audience/finder`);
+await page.getByRole('button', { name: 'Count', exact: true }).click();
+await page.getByTestId('unique-people').waitFor();
+const unique = Number((await page.getByTestId('unique-people').innerText()).replaceAll(',', ''));
+check('Audience Finder counts the DEMO population once per person', unique === 6000, `got ${unique}`);
+check('people in several panels are explained, not added up', await page.getByText('in more than one').isVisible());
+await axe('audience finder');
+await shot('17-audience-finder');
+
+await page.goto(`${BASE}/audience/filter`);
+await page.getByLabel('Add an attribute').selectOption({ label: 'Gender (self-reported)' });
+await page.getByRole('button', { name: 'Count', exact: true }).click();
+await page.getByTestId('unique-people').waitFor();
+check(
+  'the filter never offers special-category attributes',
+  !(await page.getByLabel('Add an attribute').innerText()).includes('Ethnicity'),
+);
+await page.fill('#seg-name', 'E2E women');
+await page.getByRole('button', { name: 'Save' }).click();
+await page.getByText('Saved segment').waitFor();
+await axe('audience filter');
+await shot('18-audience-filter');
+
+await page.goto(projectUrl);
+await page.getByRole('link', { name: 'Quotas and audience' }).click();
+await page.getByText('US · Female').waitFor();
+for (const cell of ['GB · whole market', 'US · Female', 'US · Male']) {
+  await page
+    .getByRole('row', { name: new RegExp(cell) })
+    .getByRole('button', { name: 'Map' })
+    .click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Turn2Opinion' }).click();
+  if (cell !== 'GB · whole market') {
+    await page.getByRole('dialog').getByLabel('Add an attribute').selectOption({ label: 'Gender (self-reported)' });
+    if (cell.endsWith('Male')) {
+      // The attribute starts on its first value (female): pick male, then drop female.
+      await page.getByRole('dialog').getByRole('button', { name: 'male', exact: true }).click();
+      await page.getByRole('dialog').getByRole('button', { name: 'female', exact: true }).click();
+    }
+  }
+  await page.getByRole('dialog').getByRole('button', { name: 'Count', exact: true }).click();
+  await page.getByRole('dialog').getByTestId('unique-people').waitFor();
+  await page.getByRole('dialog').getByRole('button', { name: 'Save mapping' }).click();
+  await page.getByRole('dialog').waitFor({ state: 'hidden' });
 }
-check('after approval a person can mark ready and launch', await page.getByText('Dispatch allowed').isVisible());
+check('every quota cell can be mapped to MADP criteria', (await page.getByText('Not mapped').count()) === 0);
+
+await page.getByRole('link', { name: 'Allocation and caps' }).click();
+await page.getByRole('button', { name: 'Save allocation' }).click();
+await page.getByText('Allocation saved').waitFor();
+// Stacked toasts fade out behind the newest one; let them go before checking contrast.
+await page.locator('[data-sonner-toast]').first().waitFor({ state: 'detached', timeout: 15000 });
+await axe('allocation');
+await shot('19-allocation');
+
+await page.getByRole('link', { name: 'Quota cells' }).click();
+for (const cell of ['GB · whole market', 'US · Female', 'US · Male']) {
+  await page
+    .getByRole('row', { name: new RegExp(cell) })
+    .getByRole('button', { name: 'Reserve' })
+    .click();
+  await page.fill('#res-count', '25');
+  await page.getByRole('dialog').getByRole('button', { name: 'Reserve' }).click();
+  await page.getByRole('dialog').waitFor({ state: 'hidden' });
+}
+await page.getByText('Audience reserved in MADP for every open cell').waitFor();
+check('reservations hold people in every cell', (await page.getByText('25 held for').count()) === 3);
+await axe('quota management');
+await shot('20-quotas');
+
+await page.goto(`${BASE}/audience/segments`);
+await page.locator('tbody tr').first().waitFor();
+check('each reservation leaves a selection snapshot', (await page.locator('tbody tr').count()) >= 3);
+await axe('segments');
+await shot('21-segments');
+
+await page.goto(`${BASE}/integrations/madp`);
+await page.getByRole('button', { name: 'Check' }).click();
+await page.getByText('MADP answered').waitFor();
+await axe('MADP integration');
+await shot('22-madp');
+
+await page.goto(projectUrl);
+await page.getByRole('heading', { name: 'Launch checks' }).waitFor();
+await lifecycleAct('Launch', 'Live');
+check('with audience reserved a person can launch', await page.getByText('Dispatch allowed').isVisible());
 await axe('project detail');
 await shot('12-project-detail');
 

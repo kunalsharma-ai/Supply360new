@@ -5,6 +5,7 @@ import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { fixtureProjects, fixtureStore } from '../src/ingestion/samptrek/fixture.js';
 import { signSampTrek } from '../src/ingestion/signature.js';
+import { prepareAudience } from './audience-setup.js';
 import { signIn, startHarness, tenant, type Harness } from './harness.js';
 
 let h: Harness;
@@ -196,8 +197,12 @@ describe('lifecycle (gate: source pause stops dispatch)', () => {
     }
   });
 
-  it('marks ready, launches and is then allowed to dispatch', async () => {
+  it('marks ready, launches once the audience is reserved, and is then allowed to dispatch', async () => {
     expect((await act(p.id, 'mark_ready')).body.lifecycle).toBe('ready');
+    const early = await act(p.id, 'launch');
+    expect(early.status).toBe(409);
+    expect(early.body.detail).toContain('mapped to MADP');
+    await prepareAudience(admin, p.id);
     const l = await act(p.id, 'launch');
     expect(l.body).toMatchObject({ lifecycle: 'live', dispatchAllowed: true });
   });

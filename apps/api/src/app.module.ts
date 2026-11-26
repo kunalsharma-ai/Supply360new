@@ -1,6 +1,9 @@
 import { Module, type DynamicModule } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { AudienceController } from './audience/audience.controller.js';
+import { AudienceService } from './audience/audience.service.js';
+import { QuotasController } from './audience/quotas.controller.js';
 import { AuditController } from './audit/audit.controller.js';
 import { AuditService } from './audit/audit.service.js';
 import { AuthController } from './auth/auth.controller.js';
@@ -40,6 +43,7 @@ export class AppModule {
         AuthService,
         UsersService,
         IngestionService,
+        AudienceService,
         SourcePoller,
         { provide: APP_GUARD, useClass: ThrottlerGuard },
         { provide: APP_GUARD, useClass: SessionGuard },
@@ -58,6 +62,8 @@ export class AppModule {
         WebhookController,
         ProjectsController,
         RedirectController,
+        AudienceController,
+        QuotasController,
       ],
     };
   }

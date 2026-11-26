@@ -71,7 +71,25 @@ const source = {
   secret: '',
   projectIds: [] as string[],
   sourceIds: ['fx-prj-10001', 'fx-prj-10002', 'fx-prj-10003'],
+  /** Phase 3: PRX10001 and its US Female cell, mapped and capped so reserve/release can run under load. */
+  audienceProject: '',
+  audienceCell: '',
 };
+/** Reserve one person, then release that reservation: exercises the project row lock and MADP round trips. */
+async function reserveRelease(c: string): Promise<Response> {
+  const r = await fetch(`${BASE}/projects/${source.audienceProject}/quotas/${source.audienceCell}/reserve`, {
+    method: 'POST',
+    headers: { ...csrf, cookie: c },
+    body: JSON.stringify({ count: 1 }),
+  });
+  if (!r.ok) return r;
+  const { reservationId } = (await r.json()) as { reservationId: string };
+  return fetch(`${BASE}/projects/${source.audienceProject}/reservations/${reservationId}/release`, {
+    method: 'POST',
+    headers: { ...csrf, cookie: c },
+    body: JSON.stringify({ reason: 'load test' }),
+  });
+}
 const any = <T>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)]!;
 let eventSeq = 0;
 /** Signed project.status_changed with the project's current status; every second one repeats an earlier event id. */
@@ -93,16 +111,32 @@ function webhook(): Promise<Response> {
 }
 
 const OPS: Op[] = [
-  { name: 'GET /auth/me', weight: 25, run: (c) => fetch(`${BASE}/auth/me`, { headers: { cookie: c } }) },
-  { name: 'GET /users', weight: 10, run: (c) => fetch(`${BASE}/users?limit=50`, { headers: { cookie: c } }) },
-  { name: 'GET /audit', weight: 10, run: (c) => fetch(`${BASE}/audit?limit=50`, { headers: { cookie: c } }) },
-  { name: 'GET /notifications', weight: 10, run: (c) => fetch(`${BASE}/notifications`, { headers: { cookie: c } }) },
-  { name: 'GET /projects', weight: 20, run: (c) => fetch(`${BASE}/projects`, { headers: { cookie: c } }) },
+  { name: 'GET /auth/me', weight: 20, run: (c) => fetch(`${BASE}/auth/me`, { headers: { cookie: c } }) },
+  { name: 'GET /users', weight: 5, run: (c) => fetch(`${BASE}/users?limit=50`, { headers: { cookie: c } }) },
+  { name: 'GET /audit', weight: 5, run: (c) => fetch(`${BASE}/audit?limit=50`, { headers: { cookie: c } }) },
+  { name: 'GET /notifications', weight: 5, run: (c) => fetch(`${BASE}/notifications`, { headers: { cookie: c } }) },
+  { name: 'GET /projects', weight: 15, run: (c) => fetch(`${BASE}/projects`, { headers: { cookie: c } }) },
   {
     name: 'GET /projects/:id',
     weight: 15,
     run: (c) => fetch(`${BASE}/projects/${any(source.projectIds)}`, { headers: { cookie: c } }),
   },
+  {
+    name: 'GET /projects/:id/quotas',
+    weight: 10,
+    run: (c) => fetch(`${BASE}/projects/${any(source.projectIds)}/quotas`, { headers: { cookie: c } }),
+  },
+  {
+    name: 'POST /audience/counts',
+    weight: 10,
+    run: (c) =>
+      fetch(`${BASE}/audience/counts`, {
+        method: 'POST',
+        headers: { ...csrf, cookie: c },
+        body: JSON.stringify({ countries: [any(['US', 'GB', 'DE', 'IN'])], panels: ['t2o'] }),
+      }),
+  },
+  { name: 'POST reserve + release', weight: 5, run: (c) => reserveRelease(c) },
   { name: 'POST signed webhook', weight: 5, run: () => webhook() },
   {
     name: 'PUT /settings/tenant',
@@ -230,6 +264,31 @@ const plist = (await (await fetch(`${BASE}/projects`, { headers: { cookie: admin
   items: { id: string }[];
 };
 source.projectIds = plist.items.map((p) => p.id);
+
+// Phase 3: a FIXTURE MADP connection, one cell mapped and given a large cap.
+const post = (path: string, body: unknown, method = 'POST') =>
+  fetch(`${BASE}${path}`, { method, headers: { ...csrf, cookie: adminCookie }, body: JSON.stringify(body) });
+const madp = await post('/audience/connections', { name: 'LOADTEST MADP FIXTURE', mode: 'fixture' });
+if (!madp.ok) throw new Error(`create MADP ${madp.status}`);
+const prx = (await (await fetch(`${BASE}/projects?q=PRX10001`, { headers: { cookie: adminCookie } })).json()) as {
+  items: { id: string }[];
+};
+source.audienceProject = prx.items[0]!.id;
+const q = (await (
+  await fetch(`${BASE}/projects/${source.audienceProject}/quotas`, { headers: { cookie: adminCookie } })
+).json()) as { cells: { id: string; name: string }[] };
+source.audienceCell = q.cells.find((c) => c.name === 'Female')!.id;
+const mapped = await post(
+  `/projects/${source.audienceProject}/quotas/${source.audienceCell}/mapping`,
+  { criteria: { panels: ['t2o'], attributes: [{ key: 'demographics.gender', values: ['female'] }] } },
+  'PUT',
+);
+const capped = await post(
+  `/projects/${source.audienceProject}/allocation`,
+  { mode: 'proportional', caps: { [source.audienceCell]: 100_000 } },
+  'PUT',
+);
+if (!mapped.ok || !capped.ok) throw new Error(`audience setup ${mapped.status} ${capped.status}`);
 
 const results = [];
 for (const c of LEVELS) results.push(await level(c, cookies));

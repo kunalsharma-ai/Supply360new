@@ -292,3 +292,177 @@ export const redirectHits = pgTable(
   },
   (t) => [index('redirect_hits_project').on(t.tenantId, t.projectId, t.receivedAt.desc())],
 );
+
+// ───────────────────────────── Phase 3: audience and quotas ─────────────────────────────
+// Supply360 keeps MADP's pseudonymous references, counts and criteria only. Criteria never include health
+// (special-category) attributes: the API refuses them before they reach MADP.
+
+export const audienceConnections = pgTable(
+  'audience_connections',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    mode: adapterMode('mode').notNull(),
+    name: text('name').notNull(),
+    baseUrl: text('base_url'),
+    clientId: text('client_id'),
+    /** Sealed MADP client secret; never returned by the API. */
+    secretSealed: text('secret_sealed'),
+    enabled: boolean('enabled').notNull().default(true),
+    lastCheckAt: timestamp('last_check_at', { withTimezone: true }),
+    lastCheckResult: jsonb('last_check_result'),
+    createdBy: uuid('created_by'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('audience_connections_tenant').on(t.tenantId)],
+);
+
+/**
+ * Quota cells per Supply360 vendor market. Cells come from SampTrek's quota API; a market without cells gets one
+ * whole-market cell (`source_cell_id` = '_market'). A person maps each cell to MADP criteria and sets its cap.
+ */
+export const quotaCells = pgTable(
+  'quota_cells',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    countryCode: text('country_code').notNull(),
+    sourceCellId: text('source_cell_id').notNull(),
+    groupName: text('group_name').notNull().default(''),
+    name: text('name').notNull(),
+    /** SampTrek's conditions as received (question ids and option ids, no answers). */
+    conditions: jsonb('conditions').notNull(),
+    conditionsHash: text('conditions_hash').notNull(),
+    /** Whole-market target and completes at the source, across all vendors. */
+    sourceTarget: integer('source_target').notNull(),
+    sourceCompletes: integer('source_completes').notNull().default(0),
+    isOpen: boolean('is_open').notNull().default(true),
+    /** Gone at the source; kept so its history and reservations stay readable. */
+    removed: boolean('removed').notNull().default(false),
+    /** MADP criteria a person mapped; cleared when the source conditions change. */
+    criteria: jsonb('criteria'),
+    mappedBy: uuid('mapped_by'),
+    mappedAt: timestamp('mapped_at', { withTimezone: true }),
+    /** Supply360 completes needed in this cell (allocation). */
+    allocationTarget: integer('allocation_target'),
+    /** Most people Supply360 may hold for this cell at once. Null blocks reservations. */
+    inviteCap: integer('invite_cap'),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('quota_cells_source').on(t.projectId, t.countryCode, t.sourceCellId)],
+);
+
+/** One allocation mode per project. */
+export const allocationPlans = pgTable('allocation_plans', {
+  projectId: uuid('project_id')
+    .primaryKey()
+    .references(() => projects.id, { onDelete: 'cascade' }),
+  tenantId: tenantId(),
+  mode: text('mode').notNull().default('proportional'),
+  updatedBy: uuid('updated_by'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Saved audience criteria a person can reuse. */
+export const audienceSegments = pgTable(
+  'audience_segments',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    name: text('name').notNull(),
+    description: text('description'),
+    criteria: jsonb('criteria').notNull(),
+    createdBy: uuid('created_by'),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('audience_segments_name').on(t.tenantId, t.name)],
+);
+
+/** Immutable record of what MADP returned for one selection: criteria, eligibility and the references picked. */
+export const audienceSelections = pgTable(
+  'audience_selections',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    cellId: uuid('cell_id')
+      .notNull()
+      .references(() => quotaCells.id, { onDelete: 'cascade' }),
+    connectionId: uuid('connection_id')
+      .notNull()
+      .references(() => audienceConnections.id, { onDelete: 'restrict' }),
+    dataMode: text('data_mode').notNull(),
+    criteria: jsonb('criteria').notNull(),
+    eligible: integer('eligible'),
+    returned: integer('returned').notNull(),
+    excluded: jsonb('excluded').notNull(),
+    refs: jsonb('refs').notNull(),
+    createdBy: uuid('created_by'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('audience_selections_project').on(t.tenantId, t.projectId, t.createdAt.desc())],
+);
+
+export const reservations = pgTable(
+  'reservations',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    cellId: uuid('cell_id')
+      .notNull()
+      .references(() => quotaCells.id, { onDelete: 'cascade' }),
+    selectionId: uuid('selection_id')
+      .notNull()
+      .references(() => audienceSelections.id, { onDelete: 'restrict' }),
+    connectionId: uuid('connection_id')
+      .notNull()
+      .references(() => audienceConnections.id, { onDelete: 'restrict' }),
+    /** MADP's reservation id. */
+    externalId: text('external_id').notNull(),
+    /** active → released | expired */
+    status: text('status').notNull().default('active'),
+    requested: integer('requested').notNull(),
+    held: integer('held').notNull(),
+    refused: jsonb('refused').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdBy: uuid('created_by'),
+    createdAt: createdAt(),
+    releasedAt: timestamp('released_at', { withTimezone: true }),
+  },
+  (t) => [index('reservations_project').on(t.tenantId, t.projectId, t.createdAt.desc())],
+);
+
+/**
+ * The references Supply360 holds right now. Unique per project, so one MADP reference (one panel membership) is
+ * never held twice for a project; released and expired holds are deleted.
+ */
+export const reservedRefs = pgTable(
+  'reserved_refs',
+  {
+    tenantId: tenantId(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    cellId: uuid('cell_id')
+      .notNull()
+      .references(() => quotaCells.id, { onDelete: 'cascade' }),
+    reservationId: uuid('reservation_id')
+      .notNull()
+      .references(() => reservations.id, { onDelete: 'cascade' }),
+    ref: text('ref').notNull(),
+    panel: text('panel').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    uniqueIndex('reserved_refs_project_ref').on(t.projectId, t.ref),
+    index('reserved_refs_cell').on(t.cellId, t.expiresAt),
+  ],
+);

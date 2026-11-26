@@ -1,4 +1,4 @@
-import type { StListItem, StProject } from './samptrek/types.js';
+import type { StListItem, StProject, StQuotas } from './samptrek/types.js';
 
 /**
  * A project source. SampTrek implements it in FIXTURE and LIVE mode; SampCloud will implement the same interface
@@ -12,6 +12,8 @@ export interface ProjectSource {
     nextCursor: string | null;
   }>;
   getProject(ref: string): Promise<StProject | null>;
+  /** Quota cells per market; null when the project is not visible. */
+  getQuotas(ref: string): Promise<StQuotas | null>;
 }
 
 export class SourceError extends Error {

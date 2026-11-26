@@ -70,3 +70,26 @@ export const StStatusChanged = z.looseObject({
   from: status.nullable().optional(),
   to: status,
 });
+
+/** `GET /projects/{ref}/quotas` (scope quotas:read): cells per market with SampTrek's own conditions. */
+export const StQuotaCell = z.looseObject({
+  id: z.string().min(1).max(60),
+  group: z.string().nullable().optional(),
+  name: z.string(),
+  conditions: z.unknown(),
+  target: z.number().int(),
+  completes: z.number().int(),
+  isOpen: z.boolean(),
+});
+export const StQuotas = z.looseObject({
+  projectCode: z.string(),
+  markets: z.array(
+    z.looseObject({
+      countryCode: z.string().regex(/^[A-Z]{2}$/),
+      targetCompletes: z.number().int(),
+      completes: z.number().int(),
+      cells: z.array(StQuotaCell),
+    }),
+  ),
+});
+export type StQuotas = z.infer<typeof StQuotas>;

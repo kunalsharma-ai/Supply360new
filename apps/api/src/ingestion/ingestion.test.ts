@@ -100,19 +100,20 @@ describe('launch checks', () => {
     entryUrl: null as string | null,
   };
   it('names the markets that are missing an approved entry link', () => {
-    const c = launchChecks({ sourceStatus: 'LIVE', fieldEndAt: null }, [
-      m,
-      { ...m, countryCode: 'GB', entryUrl: 'https://x/[UID]' },
-    ]);
+    const c = launchChecks(
+      { sourceStatus: 'LIVE', fieldEndAt: null },
+      [m, { ...m, countryCode: 'GB', entryUrl: 'https://x/[UID]' }],
+      [],
+    );
     expect(c.find((x) => x.key === 'entry_link')).toMatchObject({ ok: false, detail: 'Missing in US' });
   });
-  it('fails when Supply360 is not a vendor anywhere, and lists later-phase checks as pending', () => {
-    const c = launchChecks({ sourceStatus: 'LIVE', fieldEndAt: null }, [{ ...m, vendorLinkId: null }]);
+  it('fails when Supply360 is not a vendor anywhere, and no check is left pending', () => {
+    const c = launchChecks({ sourceStatus: 'LIVE', fieldEndAt: null }, [{ ...m, vendorLinkId: null }], []);
     expect(c.find((x) => x.key === 'vendor_link')?.ok).toBe(false);
-    expect(c.filter((x) => x.pendingPhase).map((x) => x.key)).toEqual(['quota_map', 'audience']);
+    expect(c.filter((x) => x.pendingPhase)).toEqual([]);
   });
   it('fails after the field end date', () => {
-    const c = launchChecks({ sourceStatus: 'LIVE', fieldEndAt: new Date('2020-01-01') }, [m]);
+    const c = launchChecks({ sourceStatus: 'LIVE', fieldEndAt: new Date('2020-01-01') }, [m], []);
     expect(c.find((x) => x.key === 'field_dates')?.ok).toBe(false);
   });
 });
