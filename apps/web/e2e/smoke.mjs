@@ -130,8 +130,8 @@ await page.goto(`${BASE}/security`);
 await page.getByText('Controls').first().waitFor();
 await axe('security');
 await shot('07-security');
-await page.goto(`${BASE}/invitations`);
-await page.getByText('Arrives in Phase 4').waitFor();
+await page.goto(`${BASE}/participation`);
+await page.getByText('Arrives in Phase 5').waitFor();
 check('a module not built yet shows its phase, not a mock', true);
 await shot('08-planned-module');
 
@@ -265,6 +265,80 @@ await lifecycleAct('Launch', 'Live');
 check('with audience reserved a person can launch', await page.getByText('Dispatch allowed').isVisible());
 await axe('project detail');
 await shot('12-project-detail');
+
+// 7d. Phase 4: execution policy, a batch through MADP (FIXTURE delivery), router, reminders, schedule, kill switch
+const pid = projectUrl.split('/').pop();
+await page.goto(`${BASE}/automation?project=${pid}`);
+await page.getByRole('heading', { name: 'Mode and limits' }).waitFor();
+check('no limit is filled in until a person sets it', (await page.inputValue('#p-batch')) === '');
+for (const [sel, v] of [
+  ['#p-batch', '10'],
+  ['#p-daily', '1000'],
+  ['#p-review', '15'],
+  ['#p-esc', '50'],
+  ['#p-qs', '0'],
+  ['#p-qe', '0'],
+  ['#p-tz', 'UTC'],
+  ['#p-link', '7'],
+  ['#p-rem', '24, 72'],
+  ['#p-reason', 'E2E policy'],
+])
+  await page.fill(sel, v);
+await page.getByRole('checkbox', { name: 'Turn2Opinion' }).check();
+await page.getByRole('button', { name: 'Save policy' }).click();
+await page.getByText('Policy saved as version 1').waitFor();
+await page.locator('[data-sonner-toast]').first().waitFor({ state: 'detached', timeout: 15000 });
+await axe('workflow automation');
+await shot('23-automation');
+
+await page.goto(`${BASE}/invitations?project=${pid}`);
+await page.getByRole('heading', { name: 'New batch' }).waitFor();
+await page.fill('#b-size', '5');
+await page.fill('#b-reason', 'E2E first batch');
+await page.getByRole('button', { name: 'Send', exact: true }).click();
+await page.getByText(/^Sent \d+ invitations/).waitFor();
+await page.getByRole('cell', { name: 'sent', exact: true }).first().waitFor();
+check('a manual batch is sent after its checks', (await page.getByRole('cell', { name: 'sent', exact: true }).count()) > 0);
+await page.locator('[data-sonner-toast]').first().waitFor({ state: 'detached', timeout: 15000 });
+await axe('invitation engine');
+await shot('24-invitations');
+
+const visitor = await ctx.newPage();
+await visitor.goto(`${BASE}/api/v1/i/demo/${'x'.repeat(44)}`);
+check(
+  'a forged participation link lands on a plain page and reveals nothing',
+  await visitor.getByRole('heading', { name: 'This link does not work' }).isVisible(),
+);
+await visitor.close();
+await page.goto(`${BASE}/router`);
+await page.getByRole('cell', { name: 'invalid', exact: true }).first().waitFor();
+await axe('survey router');
+await shot('25-router');
+
+await page.goto(`${BASE}/reminders`);
+await page.getByRole('cell', { name: 'pending', exact: true }).first().waitFor();
+check('reminders are planned for the invited who have not clicked', (await page.getByRole('cell', { name: 'pending', exact: true }).count()) > 0);
+await axe('reminder engine');
+await shot('26-reminders');
+
+await page.goto(`${BASE}/schedule`);
+await page.getByText('Project calendars').waitFor();
+await page.locator('tbody tr').first().waitFor();
+await axe('scheduling engine');
+await shot('27-schedule');
+
+await page.goto(`${BASE}/automation?project=${pid}`);
+await page.getByRole('button', { name: 'Emergency stop' }).click();
+await page.fill('#stop-reason', 'E2E drill');
+await page.getByRole('button', { name: 'Stop all sending' }).click();
+await page.getByText('Emergency stop is on for every project').waitFor();
+check('the emergency stop shows on every screen that sends', true);
+await page.locator('[data-sonner-toast]').first().waitFor({ state: 'detached', timeout: 15000 });
+await shot('28-kill-switch');
+await page.getByRole('button', { name: 'Lift emergency stop' }).click();
+await page.fill('#stop-reason', 'E2E drill over');
+await page.getByRole('button', { name: 'Lift the stop' }).click();
+await page.getByText('Sending resumed').waitFor();
 
 await page.goto(`${BASE}/integrations/samptrek`);
 await page.getByText('Webhook URL for SampTrek').waitFor();

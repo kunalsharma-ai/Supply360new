@@ -15,7 +15,12 @@ export class RouterController {
   @Get(':tenant/:token')
   @Head(':tenant/:token')
   @Public()
-  async open(@Param('tenant') tenant: string, @Param('token') token: string, @Req() req: Request, @Res() res: Response) {
+  async open(
+    @Param('tenant') tenant: string,
+    @Param('token') token: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
     const r = await this.exec.route(tenant, token, req.method, req.headers['user-agent']);
     res.setHeader('cache-control', 'no-store');
     res.setHeader('referrer-policy', 'no-referrer');

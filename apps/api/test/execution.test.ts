@@ -18,7 +18,8 @@ let exec: Agent;
 let pid: string;
 let madp: string;
 let cells: Cell[];
-const BROWSER = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 15_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/19.0 Safari/605.1.15';
+const BROWSER =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 15_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/19.0 Safari/605.1.15';
 
 const db = async <T extends pg.QueryResultRow>(q: string, p: unknown[] = []) => {
   const c = new pg.Client({ connectionString: h.adminUrl });
@@ -44,16 +45,21 @@ const BASE = {
   reason: 'test policy',
 };
 const policy = (over: Record<string, unknown> = {}, agent = admin) =>
-  agent.put(`/api/v1/projects/${pid}/execution/policy`).set(csrf).send({ ...BASE, ...over });
+  agent
+    .put(`/api/v1/projects/${pid}/execution/policy`)
+    .set(csrf)
+    .send({ ...BASE, ...over });
 const batch = (cellId: string, size: number, extra: Record<string, unknown> = {}, agent = admin) =>
-  agent.post(`/api/v1/projects/${pid}/batches`).set(csrf).send({ cellId, size, reason: 'test batch', ...extra });
+  agent
+    .post(`/api/v1/projects/${pid}/batches`)
+    .set(csrf)
+    .send({ cellId, size, reason: 'test batch', ...extra });
 const decide = (bid: string, decision: string, agent = admin) =>
   agent.post(`/api/v1/projects/${pid}/batches/${bid}/decision`).set(csrf).send({ decision, reason: 'test decision' });
 const send = (bid: string) => admin.post(`/api/v1/projects/${pid}/batches/${bid}/send`).set(csrf).send({});
 const tick = () => admin.post('/api/v1/execution/tick').set(csrf).send({});
 const view = async () => (await admin.get(`/api/v1/projects/${pid}/execution`)).body;
-const tokenOf = (invitationId: string) =>
-  fixtureOutbox(madp).get(`inv-${invitationId}`)!.link.split('/').pop()!;
+const tokenOf = (invitationId: string) => fixtureOutbox(madp).get(`inv-${invitationId}`)!.link.split('/').pop()!;
 const open = (token: string, ua = BROWSER, method: 'get' | 'head' = 'get') =>
   h.http[method](`/api/v1/i/acme/${token}`).set('user-agent', ua);
 const sentInvites = (batchId: string) =>
@@ -80,8 +86,12 @@ beforeAll(async () => {
     ['aiops@acme.example.invalid', 'ai_operations_manager'],
   ])
     expect(
-      (await admin.post('/api/v1/users').set(csrf).send({ email, name: role, roles: [role], password: PASSWORD }))
-        .status,
+      (
+        await admin
+          .post('/api/v1/users')
+          .set(csrf)
+          .send({ email, name: role, roles: [role], password: PASSWORD })
+      ).status,
     ).toBe(201);
   ({ agent: exec } = await signIn(h, 'acme', 'exec@acme.example.invalid'));
   const s = await admin
@@ -185,9 +195,10 @@ describe('no duplicate dispatch', () => {
       [inv.map((x) => x.id)],
     );
     expect(att[0]!.n).toBe(inv.length);
-    const [final] = await db<{ status: string; sent: number }>('select status, sent from invitation_batches where id = $1', [
-      b.body.id,
-    ]);
+    const [final] = await db<{ status: string; sent: number }>(
+      'select status, sent from invitation_batches where id = $1',
+      [b.body.id],
+    );
     expect(final).toMatchObject({ status: 'sent', sent: inv.length });
     const dup = await db('select ref from invitations where project_id = $1 group by ref having count(*) > 1', [pid]);
     expect(dup).toHaveLength(0);
@@ -202,9 +213,15 @@ describe('survey router (gate: a click cancels reminders)', () => {
   });
   it('a link scanner (HEAD, bot user agent, none) is recorded as prefetch, not a click', async () => {
     const t = tokenOf(rows[0]!.id);
-    for (const r of [await open(t, BROWSER, 'head'), await open(t, 'Mozilla/5.0 (compatible; Proofpoint URL Defense)'), await h.http.get(`/api/v1/i/acme/${t}`).unset('user-agent')])
+    for (const r of [
+      await open(t, BROWSER, 'head'),
+      await open(t, 'Mozilla/5.0 (compatible; Proofpoint URL Defense)'),
+      await h.http.get(`/api/v1/i/acme/${t}`).unset('user-agent'),
+    ])
       expect(r.status).toBe(302);
-    const [inv] = await db<{ clicked_at: Date | null }>('select clicked_at from invitations where id = $1', [rows[0]!.id]);
+    const [inv] = await db<{ clicked_at: Date | null }>('select clicked_at from invitations where id = $1', [
+      rows[0]!.id,
+    ]);
     expect(inv!.clicked_at).toBeNull();
     const ev = await db<{ kind: string }>('select kind from router_events where invitation_id = $1', [rows[0]!.id]);
     expect(ev.map((e) => e.kind)).toEqual(['prefetch', 'prefetch', 'prefetch']);
@@ -241,17 +258,19 @@ describe('survey router (gate: a click cancels reminders)', () => {
   it('the click reaches MADP through the outbox, once', async () => {
     await tick();
     await tick();
-    const [inv] = await db<{ click_reported_at: Date | null }>('select click_reported_at from invitations where id = $1', [
-      rows[0]!.id,
-    ]);
+    const [inv] = await db<{ click_reported_at: Date | null }>(
+      'select click_reported_at from invitations where id = $1',
+      [rows[0]!.id],
+    );
     expect(inv!.click_reported_at).not.toBeNull();
     expect(fixtureEvents(madp).get(`s360-click-${rows[0]!.id}`)).toBe('click');
   });
   it('a click and a due reminder at the same moment: the reminder never goes after the click', async () => {
     const racers = rows.slice(3, 8);
-    await db("update reminder_jobs set due_at = now() - interval '1 second' where attempt = 1 and invitation_id = any($1::uuid[])", [
-      racers.map((r) => r.id),
-    ]);
+    await db(
+      "update reminder_jobs set due_at = now() - interval '1 second' where attempt = 1 and invitation_id = any($1::uuid[])",
+      [racers.map((r) => r.id)],
+    );
     await Promise.all([tick(), ...racers.map((r) => open(tokenOf(r.id)))]);
     const jobs = await db<{ status: string; done_at: Date; clicked_at: Date }>(
       `select j.status, j.done_at, i.clicked_at from reminder_jobs j join invitations i on i.id = j.invitation_id
@@ -268,9 +287,10 @@ describe('survey router (gate: a click cancels reminders)', () => {
   it('a due reminder for someone who withdrew consent is skipped, and others are sent', async () => {
     const [a, b] = [rows[8]!, rows[9]!];
     fixtureWithdrawConsent(madp, a.ref);
-    await db("update reminder_jobs set due_at = now() - interval '1 second' where attempt = 1 and invitation_id = any($1::uuid[])", [
-      [a.id, b.id],
-    ]);
+    await db(
+      "update reminder_jobs set due_at = now() - interval '1 second' where attempt = 1 and invitation_id = any($1::uuid[])",
+      [[a.id, b.id]],
+    );
     await tick();
     const jobs = await db<{ invitation_id: string; status: string; reason: string | null }>(
       'select invitation_id, status, reason from reminder_jobs where attempt = 1 and invitation_id = any($1::uuid[])',
@@ -285,7 +305,9 @@ describe('survey router (gate: a click cancels reminders)', () => {
 
 describe('checks at send time', () => {
   it('the emergency stop holds every batch and reminder until lifted', async () => {
-    expect((await exec.put('/api/v1/execution/kill-switch').set(csrf).send({ halted: true, reason: 'drill' })).status).toBe(403);
+    expect(
+      (await exec.put('/api/v1/execution/kill-switch').set(csrf).send({ halted: true, reason: 'drill' })).status,
+    ).toBe(403);
     await admin.put('/api/v1/execution/kill-switch').set(csrf).send({ halted: true, reason: 'drill' });
     const b = await batch(gb().id, 5);
     expect(b.body).toMatchObject({ status: 'approved', sent: 0, blockedReason: 'halted' });
@@ -310,7 +332,10 @@ describe('checks at send time', () => {
     await db("update projects set lifecycle = 'source_hold' where id = $1", [pid]);
     const b = await batch(female().id, 5);
     expect(b.body).toMatchObject({ status: 'approved', blockedReason: 'project_not_live' });
-    const [one] = await db<{ id: string }>("select id from invitations where project_id = $1 and status = 'sent' and country_code = 'US' limit 1", [pid]);
+    const [one] = await db<{ id: string }>(
+      "select id from invitations where project_id = $1 and status = 'sent' and country_code = 'US' limit 1",
+      [pid],
+    );
     expect((await open(tokenOf(one!.id))).headers.location).toMatch(/\/done\/closed$/);
     await db("update projects set lifecycle = 'live' where id = $1", [pid]);
     expect((await send(b.body.id)).body.status).toBe('sent');
@@ -333,7 +358,9 @@ describe('semi-automatic mode (gate: approval is enforced)', () => {
     const r = await tick();
     expect(r.body.planned).toBeGreaterThan(0);
     const v = await view();
-    const proposed = v.batches.filter((b: { status: string; origin: string }) => b.status === 'proposed' && b.origin === 'system');
+    const proposed = v.batches.filter(
+      (b: { status: string; origin: string }) => b.status === 'proposed' && b.origin === 'system',
+    );
     expect(proposed.length).toBe(r.body.planned);
     expect(proposed.every((b: { sent: number }) => b.sent === 0)).toBe(true);
     const n = (await admin.get('/api/v1/notifications')).body.items;
@@ -343,13 +370,21 @@ describe('semi-automatic mode (gate: approval is enforced)', () => {
   });
   it('changing mode cancels what the system proposed and keeps every invitation and batch', async () => {
     const before = await db<{ n: number }>('select count(*)::int n from invitations where project_id = $1', [pid]);
-    const batches = await db<{ n: number }>('select count(*)::int n from invitation_batches where project_id = $1', [pid]);
+    const batches = await db<{ n: number }>('select count(*)::int n from invitation_batches where project_id = $1', [
+      pid,
+    ]);
     const r = await policy({ mode: 'manual' });
     expect(r.body.cancelledSystemBatches).toBeGreaterThan(0);
     expect(r.body.policy.version).toBeGreaterThan(1);
-    expect((await db<{ n: number }>('select count(*)::int n from invitations where project_id = $1', [pid]))[0]).toEqual(before[0]);
-    expect((await db<{ n: number }>('select count(*)::int n from invitation_batches where project_id = $1', [pid]))[0]).toEqual(batches[0]);
-    const audit = await db("select 1 from audit_logs where action = 'execution.mode_changed' and target_id = $1", [pid]);
+    expect(
+      (await db<{ n: number }>('select count(*)::int n from invitations where project_id = $1', [pid]))[0],
+    ).toEqual(before[0]);
+    expect(
+      (await db<{ n: number }>('select count(*)::int n from invitation_batches where project_id = $1', [pid]))[0],
+    ).toEqual(batches[0]);
+    const audit = await db("select 1 from audit_logs where action = 'execution.mode_changed' and target_id = $1", [
+      pid,
+    ]);
     expect(audit.length).toBeGreaterThan(0);
   });
 });
@@ -370,7 +405,8 @@ describe('automatic mode (gate: obeys the limits and escalates)', () => {
   });
   it('escalates to a person and proposes nothing more when too many are refused', async () => {
     await policy({ mode: 'auto', escalateRefusalPercent: 10 });
-    for (const c of [female(), male(), gb()]) for (const r of await nextRefs(c.id, 5)) fixtureWithdrawConsent(madp, r.ref);
+    for (const c of [female(), male(), gb()])
+      for (const r of await nextRefs(c.id, 5)) fixtureWithdrawConsent(madp, r.ref);
     await tick();
     let v = await view();
     expect(v.policy.escalatedAt).not.toBeNull();
@@ -401,7 +437,7 @@ describe('missing delivery API (gate: pauses safely)', () => {
     expect(b.body).toMatchObject({ status: 'blocked', blockedReason: 'delivery_unavailable', sent: 0 });
     expect(fixtureOutbox(madp).size).toBe(before);
     const [att] = await db<{ status: string }>(
-      "select a.status from delivery_attempts a join invitations i on i.id = a.invitation_id where i.batch_id = $1",
+      'select a.status from delivery_attempts a join invitations i on i.id = a.invitation_id where i.batch_id = $1',
       [b.body.id],
     );
     expect(att!.status).toBe('unavailable');
@@ -419,7 +455,9 @@ describe('tenant isolation', () => {
     expect((await agent.get('/api/v1/execution/reminders')).body.items).toHaveLength(0);
     // The forged link opened under this tenant's address earlier is its own record, with no project.
     const ev = (await agent.get('/api/v1/execution/router-events')).body.items;
-    expect(ev.every((e: { kind: string; projectCode: string | null }) => e.kind === 'invalid' && !e.projectCode)).toBe(true);
+    expect(ev.every((e: { kind: string; projectCode: string | null }) => e.kind === 'invalid' && !e.projectCode)).toBe(
+      true,
+    );
     expect((await agent.get('/api/v1/execution/overview')).body.projects).toHaveLength(0);
   });
 });

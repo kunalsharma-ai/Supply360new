@@ -133,3 +133,30 @@ Flags: `--base`, `--users`, `--levels`, `--duration`, `--json`.
   as an immutable snapshot. Launch and Resume now need every open cell mapped and holding people.
 - Known MADP gaps: no attribute values list, no nested filter groups, no person-level key in match, no dispatch or
   delivery callbacks yet.
+
+## Phase 4: invitations, reminders, scheduling, router and execution modes
+
+- **Execution policy** (`/automation`): per project, a person sets the mode (manual, semi-automatic, automatic), batch
+  size, daily maximum, review interval, quiet hours in a time zone, reminder times, allowed panels, link validity and
+  the refusal level at which automation escalates. Nothing has a default value: no policy, no sending. Automatic mode
+  needs `execution.approve`. Changing the mode cancels batches the system proposed under the old mode and keeps every
+  invitation, reminder and audit record.
+- **Batches** (`/invitations`, `/schedule`): every send happens under the project row lock and rechecks, in order, the
+  tenant emergency stop, the project and market (live here and at SampTrek, entry link approved), the cell, quiet hours,
+  the daily maximum and MADP consent, then authorises with MADP (`invitations/authorize`, idempotency key per request).
+  One invitation per MADP reference per project (unique index). Hand-off to delivery is a second step with an
+  idempotency key per invitation, so a crash or a concurrent send never sends twice. People MADP refuses leave the hold.
+- **Delivery**: MADP has no send endpoint yet. FIXTURE uses a labelled DEMO channel that sends nothing anywhere. LIVE
+  answers "unavailable", so the batch stops as blocked, a person is notified, and automation stops proposing.
+- **Reminders** (`/reminders`): planned at send time from the policy, only for people who have not clicked. Each one locks
+  its invitation row and rechecks the project, quiet hours and consent; a click locks the same row and cancels every
+  pending reminder, so a click and a reminder can never both win.
+- **Survey router** (`GET /api/v1/i/{tenant}/{token}`, `/router`): the token is 44 URL-safe characters (invitation id and
+  an HMAC), carries no personal data and is never stored. Link scanners (HEAD, no user agent, known gateways) are
+  recorded as prefetch, never as clicks. A click goes to the approved entry link with the token as SampTrek's `[UID]`;
+  expired, closed and forged links go to plain pages. Clicks reach MADP through an outbox (`participation/events`, event
+  id per click).
+- **Scheduler**: every `DISPATCH_TICK_SECONDS` (advisory lock, one instance at a time) it runs semi-automatic and
+  automatic planning, due batches, due reminders and the click outbox.
+- **Emergency stop**: `PUT /execution/kill-switch` (`execution.emergency_stop`) halts all sending and reminders for the
+  tenant until lifted.

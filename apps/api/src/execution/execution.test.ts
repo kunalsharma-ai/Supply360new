@@ -33,15 +33,19 @@ describe('quiet hours and days', () => {
     expect(inQuietHours(p, at('2026-11-26T10:00:00Z'))).toBe(false); // 15:30 IST
   });
   it('treats equal hours as no quiet hours', () =>
-    expect(inQuietHours({ timezone: 'UTC', quietStartHour: 5, quietEndHour: 5 }, at('2026-11-26T05:30:00Z'))).toBe(false));
+    expect(inQuietHours({ timezone: 'UTC', quietStartHour: 5, quietEndHour: 5 }, at('2026-11-26T05:30:00Z'))).toBe(
+      false,
+    ));
   it('finds local midnight for the daily maximum', () => {
-    expect(localParts('America/New_York', at('2026-11-26T03:00:00Z')).midnight.toISOString()).toBe('2026-11-25T05:00:00.000Z');
+    expect(localParts('America/New_York', at('2026-11-26T03:00:00Z')).midnight.toISOString()).toBe(
+      '2026-11-25T05:00:00.000Z',
+    );
     expect(localParts('UTC', at('2026-11-26T03:00:00Z')).midnight.toISOString()).toBe('2026-11-26T00:00:00.000Z');
   });
   it('says when quiet hours end', () =>
-    expect(quietEndsAt({ timezone: 'UTC', quietStartHour: 21, quietEndHour: 8 }, at('2026-11-26T22:00:00Z')).toISOString()).toBe(
-      '2026-11-27T08:00:00.000Z',
-    ));
+    expect(
+      quietEndsAt({ timezone: 'UTC', quietStartHour: 21, quietEndHour: 8 }, at('2026-11-26T22:00:00Z')).toISOString(),
+    ).toBe('2026-11-27T08:00:00.000Z'));
 });
 
 describe('link scanners', () => {

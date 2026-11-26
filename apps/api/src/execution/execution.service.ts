@@ -43,7 +43,14 @@ const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 const OPEN_BATCH = ['proposed', 'approved', 'sending'];
 /** Reasons a batch waits and is tried again by the scheduler; anything else stops it as blocked. */
-const TRANSIENT = new Set(['halted', 'quiet_hours', 'daily_cap', 'project_not_live', 'market_not_dispatchable', 'madp_unavailable']);
+const TRANSIENT = new Set([
+  'halted',
+  'quiet_hours',
+  'daily_cap',
+  'project_not_live',
+  'market_not_dispatchable',
+  'madp_unavailable',
+]);
 
 export const REASON_TEXT: Record<string, string> = {
   halted: 'The emergency stop is on',
@@ -110,7 +117,15 @@ export class ExecutionService {
     return `${base}/api/v1/i/${tenantSlug}/${this.signer.sign(invitationId)}`;
   }
 
-  private async notify(tx: Tx, tenantId: string, kind: string, severity: string, title: string, body: string, link: string) {
+  private async notify(
+    tx: Tx,
+    tenantId: string,
+    kind: string,
+    severity: string,
+    title: string,
+    body: string,
+    link: string,
+  ) {
     await tx.insert(notifications).values({ tenantId, userId: null, kind, severity, title, body, link });
   }
 
@@ -171,7 +186,10 @@ export class ExecutionService {
         and(
           eq(reservedRefs.cellId, cell.id),
           gt(reservedRefs.expiresAt, now),
-          inArray(reservedRefs.panel, (policy.allowedPanels as string[]).length ? (policy.allowedPanels as string[]) : ['-']),
+          inArray(
+            reservedRefs.panel,
+            (policy.allowedPanels as string[]).length ? (policy.allowedPanels as string[]) : ['-'],
+          ),
           sql`not exists (select 1 from ${invitations} where ${invitations.projectId} = ${cell.projectId} and ${invitations.ref} = ${reservedRefs.ref})`,
         ),
       );
@@ -334,7 +352,14 @@ export class ExecutionService {
         targetType: 'invitation_batch',
         targetId: b!.id,
         reason: body.reason,
-        details: { projectId, cellId: cell.id, size: body.size, status, mode: policy.mode, scheduledAt: body.scheduledAt ?? null },
+        details: {
+          projectId,
+          cellId: cell.id,
+          size: body.size,
+          status,
+          mode: policy.mode,
+          scheduledAt: body.scheduledAt ?? null,
+        },
       });
       return b!;
     });
@@ -345,7 +370,10 @@ export class ExecutionService {
 
   async decide(ctx: RequestContext, projectId: string, batchId: string, body: BatchDecision) {
     if (body.decision !== 'cancel' && !ctx.permissions.includes('execution.approve'))
-      throw problem.forbidden('approval_required', 'Approving or rejecting a batch needs the execution.approve permission');
+      throw problem.forbidden(
+        'approval_required',
+        'Approving or rejecting a batch needs the execution.approve permission',
+      );
     const b = await withTenant(this.db, ctx.tenantId, async (tx) => {
       await this.lockProject(tx, projectId);
       const [b] = await tx
@@ -418,7 +446,9 @@ export class ExecutionService {
       const transient = TRANSIENT.has(reason);
       const [b] = await t
         .update(invitationBatches)
-        .set(transient ? { blockedReason: reason } : { status: 'blocked', blockedReason: reason, finishedAt: new Date() })
+        .set(
+          transient ? { blockedReason: reason } : { status: 'blocked', blockedReason: reason, finishedAt: new Date() },
+        )
         .where(and(eq(invitationBatches.id, batchId), inArray(invitationBatches.status, ['approved', 'sending'])))
         .returning();
       if (!b || transient) return;
@@ -492,7 +522,8 @@ export class ExecutionService {
       const dropped = cands.filter((c) => !ok.has(c.ref)).map((c) => c.ref);
 
       const byRes = new Map<string, typeof cands>();
-      for (const c of cands.filter((c) => ok.has(c.ref))) byRes.set(c.reservationId, [...(byRes.get(c.reservationId) ?? []), c]);
+      for (const c of cands.filter((c) => ok.has(c.ref)))
+        byRes.set(c.reservationId, [...(byRes.get(c.reservationId) ?? []), c]);
       const expiresAt = new Date(now.getTime() + policy!.linkValidDays * DAY);
       let authorized = 0;
       for (const [resId, group] of byRes) {
@@ -535,7 +566,15 @@ export class ExecutionService {
         action: 'invitations.authorized',
         targetType: 'invitation_batch',
         targetId: b!.id,
-        details: { projectId: p.id, cellId: cell!.id, candidates: cands.length, authorized, refused, droppedFromHold: dropped.length, mode: policy!.mode },
+        details: {
+          projectId: p.id,
+          cellId: cell!.id,
+          candidates: cands.length,
+          authorized,
+          refused,
+          droppedFromHold: dropped.length,
+          mode: policy!.mode,
+        },
       });
       if (!authorized) return this.stop(tenantId, b!.id, 'all_refused', undefined, tx);
       const total = authorized + refused;
@@ -570,12 +609,7 @@ export class ExecutionService {
           await tx
             .select({ key: deliveryAttempts.idempotencyKey })
             .from(deliveryAttempts)
-            .where(
-              inArray(
-                deliveryAttempts.idempotencyKey,
-                todo.length ? todo.map((i) => `inv-${i.id}`) : ['-'],
-              ),
-            )
+            .where(inArray(deliveryAttempts.idempotencyKey, todo.length ? todo.map((i) => `inv-${i.id}`) : ['-']))
         ).map((x) => x.key),
       );
       const sent: string[] = [];
@@ -712,7 +746,10 @@ export class ExecutionService {
             detail: r.status === 'unavailable' ? r.detail : null,
           })
           .onConflictDoNothing();
-        await finish(r.status === 'accepted' ? 'sent' : 'blocked', r.status === 'accepted' ? null : 'delivery_unavailable');
+        await finish(
+          r.status === 'accepted' ? 'sent' : 'blocked',
+          r.status === 'accepted' ? null : 'delivery_unavailable',
+        );
         done++;
       });
     }
@@ -792,9 +829,16 @@ export class ExecutionService {
     });
     if (!work?.rows.length) return 0;
     try {
-      await this.audience.sourceFor(work.conn).participation(
-        work.rows.map((r) => ({ eventId: `s360-click-${r.id}`, invitationId: r.madp, event: 'click', occurredAt: r.at!.toISOString() })),
-      );
+      await this.audience
+        .sourceFor(work.conn)
+        .participation(
+          work.rows.map((r) => ({
+            eventId: `s360-click-${r.id}`,
+            invitationId: r.madp,
+            event: 'click',
+            occurredAt: r.at!.toISOString(),
+          })),
+        );
     } catch (e) {
       this.log.warn(`click report waits: ${(e as Error).message}`);
       return 0;
@@ -803,7 +847,12 @@ export class ExecutionService {
       tx
         .update(invitations)
         .set({ clickReportedAt: new Date() })
-        .where(inArray(invitations.id, work.rows.map((r) => r.id))),
+        .where(
+          inArray(
+            invitations.id,
+            work.rows.map((r) => r.id),
+          ),
+        ),
     );
     return work.rows.length;
   }
@@ -857,7 +906,14 @@ export class ExecutionService {
         const cells = await tx
           .select()
           .from(quotaCells)
-          .where(and(eq(quotaCells.projectId, p.id), eq(quotaCells.removed, false), eq(quotaCells.isOpen, true), isNotNull(quotaCells.criteria)));
+          .where(
+            and(
+              eq(quotaCells.projectId, p.id),
+              eq(quotaCells.removed, false),
+              eq(quotaCells.isOpen, true),
+              isNotNull(quotaCells.criteria),
+            ),
+          );
         let n = 0;
         for (const cell of cells) {
           if (open.has(cell.id) || room <= 0) continue;
@@ -993,7 +1049,12 @@ export class ExecutionService {
     return withTenant(this.db, ctx.tenantId, async (tx) => {
       const control = await this.halted(tx);
       const rows = await tx
-        .select({ policy: executionPolicies, code: projects.projectCode, name: projects.name, lifecycle: projects.lifecycle })
+        .select({
+          policy: executionPolicies,
+          code: projects.projectCode,
+          name: projects.name,
+          lifecycle: projects.lifecycle,
+        })
         .from(executionPolicies)
         .innerJoin(projects, eq(projects.id, executionPolicies.projectId))
         .orderBy(asc(projects.projectCode));
@@ -1029,13 +1090,18 @@ export class ExecutionService {
         .innerJoin(quotaCells, eq(quotaCells.id, invitationBatches.cellId))
         .orderBy(desc(invitationBatches.createdAt))
         .limit(100);
-      return { items: rows.map((q) => ({ ...batchView(q.b), projectCode: q.code, cellName: q.cell, countryCode: q.cc })) };
+      return {
+        items: rows.map((q) => ({ ...batchView(q.b), projectCode: q.code, cellName: q.cell, countryCode: q.cc })),
+      };
     });
   }
 
   async reminders(ctx: RequestContext) {
     return withTenant(this.db, ctx.tenantId, async (tx) => {
-      const totals = await tx.select({ status: reminderJobs.status, n: count() }).from(reminderJobs).groupBy(reminderJobs.status);
+      const totals = await tx
+        .select({ status: reminderJobs.status, n: count() })
+        .from(reminderJobs)
+        .groupBy(reminderJobs.status);
       const rows = await tx
         .select({ r: reminderJobs, code: projects.projectCode, cc: invitations.countryCode })
         .from(reminderJobs)
