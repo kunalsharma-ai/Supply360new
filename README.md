@@ -217,3 +217,9 @@ fieldwork reads (Phase 5).
   automatically.
 - **Docs:** [runbooks](docs/runbooks/README.md) and [production reports](docs/production/readiness-checklist.md)
   (readiness checklist, security review, accessibility, performance).
+
+## Production containers
+
+`deploy/docker-compose.prod.yml`: the `supply-360` NGINX proxy routes `/api/` to the API and the rest to the web app; no
+container publishes a port; containers talk over the private `supply` network and only the proxy joins the external
+`publicweb` network. See [deploy/README.md](deploy/README.md).

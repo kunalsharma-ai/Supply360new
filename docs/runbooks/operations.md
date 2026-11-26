@@ -11,7 +11,8 @@
 ## Metrics
 
 `GET /api/v1/metrics` serves Prometheus text when called with `Authorization: Bearer $METRICS_TOKEN`; without the
-token it answers 401, and with no token configured it answers 404. Route labels are route patterns
+token it answers 401, and with no token configured it answers 404. The supply-360 proxy never serves it publicly;
+scrape `http://api:4000/api/v1/metrics` from the `supply` network. Route labels are route patterns
 (`/api/v1/projects/:id`), never raw paths, so ids never become label values.
 
 | Metric | Alert when |
