@@ -29,6 +29,11 @@ describe('production configuration', () => {
   ])('refuses %o', (over, msg) => {
     expect(() => loadEnv({ ...good, ...over })).toThrow(msg);
   });
+  it('reads the proxy hop count for client addresses', () => {
+    expect(loadEnv({ ...good, TRUST_PROXY_HOPS: '2' }).TRUST_PROXY_HOPS).toBe(2);
+    expect(loadEnv(good).TRUST_PROXY_HOPS).toBeUndefined();
+    expect(() => loadEnv({ ...good, TRUST_PROXY_HOPS: '9' })).toThrow();
+  });
   it('allows local settings outside production', () => {
     expect(() => loadEnv({ ...good, NODE_ENV: 'development', COOKIE_SECURE: 'false', WEB_ORIGIN: 'http://localhost:3000' })).not.toThrow();
   });

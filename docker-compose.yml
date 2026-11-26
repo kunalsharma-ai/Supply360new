@@ -27,6 +27,7 @@ services:
     command: ['node', 'packages/db/dist/migrate.js']
     environment:
       DATABASE_ADMIN_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/supply360
+      S360_API_DB_PASSWORD: ${S360_API_DB_PASSWORD:?set S360_API_DB_PASSWORD}
     depends_on: { postgres: { condition: service_healthy } }
     profiles: ['app']
 

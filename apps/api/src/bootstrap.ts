@@ -23,7 +23,7 @@ export async function createApp(env: Env): Promise<NestExpressApplication> {
     // Webhook signatures are checked against the exact bytes received (req.rawBody).
     rawBody: true,
   });
-  app.set('trust proxy', env.NODE_ENV === 'production' ? 1 : false);
+  app.set('trust proxy', env.TRUST_PROXY_HOPS ?? (env.NODE_ENV === 'production' ? 1 : false));
   app.disable('x-powered-by');
   app.use(httpMetrics);
   app.use(helmet({ contentSecurityPolicy: { directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] } } }));

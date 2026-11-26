@@ -39,6 +39,11 @@ const Env = z.object({
     .transform((v) => v === 'true'),
   /** Bearer token for GET /api/v1/metrics (Prometheus). Unset turns the endpoint off. */
   METRICS_TOKEN: z.string().min(32, 'METRICS_TOKEN must be at least 32 characters').optional(),
+  /**
+   * Proxies in front of the API that append to X-Forwarded-For, so the client address (used for sign-in throttling
+   * and audit) is read from the right place. Production behind Traefik and the supply-360 NGINX proxy is 2.
+   */
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).optional(),
   /** `json` writes one JSON object per log line (default in production); `text` is for local work. */
   LOG_FORMAT: z.enum(['json', 'text']).optional(),
 });

@@ -18,6 +18,12 @@ A person runs the steps below with an approved change record.
 3. Run `pnpm --filter @s360/web e2e` against staging with a staging test account, and `pnpm --filter @s360/api load-test`
    against staging only (never production). Attach both results to the change record.
 
+## Container layout
+
+Production runs `deploy/docker-compose.prod.yml` ([deploy/README.md](../../deploy/README.md)): the `supply-360` NGINX
+proxy is the only container on the external `publicweb` network, routes `/api/` to the API and everything else to the
+web app, and no container publishes a port. Containers talk over the private `supply` network.
+
 ## 3. Production (only with the recorded approval)
 
 1. Take a backup: `scripts/backup.sh` (see [backup-restore.md](backup-restore.md)). Note the file name in the change.
@@ -34,7 +40,8 @@ A person runs the steps below with an approved change record.
 `NODE_ENV=production`, `COOKIE_SECURE=true`, `PARTICIPATION_TOKEN_SECRET` (32+ chars, separate from the session secret), https `WEB_ORIGIN` and `PUBLIC_BASE_URL`, `DATABASE_URL` as the
 `s360_api` login role (member of `s360_app`, so row-level security applies), `DATABASE_ADMIN_URL` only for the migrate
 job and scripts, `SESSION_SECRET` (32+ chars), `FIELD_ENCRYPTION_KEY` (32 bytes, base64), `METRICS_TOKEN` (32+
-chars), `LOGIN_RATE_LIMIT` 30 or less. Put the web app behind TLS and forward `X-Forwarded-Proto: https` so HSTS and
+chars), `LOGIN_RATE_LIMIT` 30 or less, `TRUST_PROXY_HOPS` equal to the number of proxies in front of the API (2 with
+the edge proxy and supply-360). Put the web app behind TLS and forward `X-Forwarded-Proto: https` so HSTS and
 `upgrade-insecure-requests` are sent.
 
 ## 4. Rollback

@@ -1,0 +1,96 @@
+# Production stack for Supply360 (issue #13).
+#
+# - supply-360 is an NGINX reverse proxy and the only way in. It routes /api/ to the API and everything else to the
+#   web app, by path.
+# - No container publishes a port. Containers talk to each other over the private `supply` network.
+# - supply-360 also joins `publicweb`, an external network managed separately (Traefik, or an NGINX with a web
+#   interface). That proxy terminates TLS and forwards to http://supply-360:80.
+#
+# One-time:  docker network create publicweb      (skip if the Traefik stack already created it)
+# Start:     docker compose -f deploy/docker-compose.prod.yml --env-file .env up -d --build
+# See docs/runbooks/deployment.md. Do not deploy to production without an approved change.
+name: supply360
+
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: supply360
+    volumes: ['pgdata:/var/lib/postgresql']
+    networks: [supply]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d supply360']
+      interval: 5s
+      retries: 20
+
+  migrate:
+    build: { context: .., dockerfile: apps/api/Dockerfile }
+    command: ['node', 'packages/db/dist/migrate.js']
+    environment:
+      DATABASE_ADMIN_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/supply360
+      S360_API_DB_PASSWORD: ${S360_API_DB_PASSWORD:?set S360_API_DB_PASSWORD}
+    networks: [supply]
+    depends_on: { postgres: { condition: service_healthy } }
+
+  api:
+    build: { context: .., dockerfile: apps/api/Dockerfile }
+    restart: unless-stopped
+    env_file: ${S360_ENV_FILE:-../.env}
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://s360_api:${S360_API_DB_PASSWORD:?set S360_API_DB_PASSWORD}@postgres:5432/supply360
+      DATABASE_ADMIN_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/supply360
+      # Traefik and supply-360 both append to X-Forwarded-For.
+      TRUST_PROXY_HOPS: '2'
+    networks: [supply]
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://localhost:4000/api/v1/health/ready').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args: { S360_API_URL: 'http://api:4000' }
+    restart: unless-stopped
+    networks: [supply]
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://localhost:3000/login').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    depends_on: { api: { condition: service_healthy } }
+
+  proxy:
+    image: nginx:1.30.8-alpine
+    container_name: supply-360
+    restart: unless-stopped
+    volumes: ['./nginx/supply-360.conf:/etc/nginx/conf.d/default.conf:ro']
+    networks: [supply, publicweb]
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1/nginx-health']
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    depends_on:
+      api: { condition: service_healthy }
+      web: { condition: service_healthy }
+
+networks:
+  # Private network for container-to-container traffic. Nothing on it is published to the host. It is a normal
+  # bridge (not `internal: true`) because the API must reach SampTrek and MADP over the internet.
+  supply:
+    name: supply
+  # Shared with Traefik or the separately managed NGINX. Only supply-360 joins it.
+  publicweb:
+    name: publicweb
+    external: true
+
+volumes:
+  pgdata:
