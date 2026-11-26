@@ -959,3 +959,25 @@ export const alertMarks = pgTable(
   },
   (t) => [uniqueIndex('alert_marks_key').on(t.tenantId, t.key)],
 );
+
+/**
+ * The AI the Copilot may use to understand questions in any language and to answer in that language. Set on the
+ * Copilot screen by the tenant. The key is sealed and the address must be public https. The model only ever turns
+ * words into one of the Copilot's typed, read-only questions; the answer itself always comes from Supply360's data.
+ */
+export const copilotAi = pgTable('copilot_ai', {
+  tenantId: uuid('tenant_id')
+    .primaryKey()
+    .references(() => tenants.id, { onDelete: 'restrict' }),
+  kind: text('kind').notNull(),
+  label: text('label').notNull(),
+  baseUrl: text('base_url'),
+  authStyle: text('auth_style').notNull().default('bearer'),
+  model: text('model').notNull(),
+  sealedKey: text('sealed_key'),
+  enabled: boolean('enabled').notNull().default(false),
+  timeoutMs: integer('timeout_ms').notNull().default(20_000),
+  dailyLimit: integer('daily_limit').notNull().default(500),
+  updatedBy: uuid('updated_by'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});

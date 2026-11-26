@@ -127,6 +127,20 @@
       "when": 1795717337179,
       "tag": "0017_alerts_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1795717620182,
+      "tag": "0018_copilot_ai",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1795717620682,
+      "tag": "0019_copilot_ai_rls",
+      "breakpoints": true
     }
   ]
 }

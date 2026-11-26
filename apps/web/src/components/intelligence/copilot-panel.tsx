@@ -21,7 +21,12 @@ interface Interaction {
   rationale: string;
   status: 'answered' | 'proposed' | 'approved' | 'rejected' | 'failed' | 'refused';
   action: { type: 'create_batch'; projectCode: string; cellName: string; size: number; reason: string } | null;
-  answer: { text: string; batch?: { id: string; status: string; blockedReason: string | null } } | null;
+  answer: {
+    text: string;
+    textEn?: string;
+    language?: string;
+    batch?: { id: string; status: string; blockedReason: string | null };
+  } | null;
   createdAt: string;
 }
 const TONE = {
@@ -124,6 +129,12 @@ export function CopilotPanel({ compact = false }: { compact?: boolean }) {
                   <span>{x.modelVersion}</span>
                 </div>
                 <p data-testid="copilot-answer">{x.answer?.text}</p>
+                {x.answer?.textEn && (
+                  <details className="mt-1 text-xs text-muted">
+                    <summary className="cursor-pointer">Original English answer</summary>
+                    <p className="mt-1">{x.answer.textEn}</p>
+                  </details>
+                )}
                 {x.answer?.batch && (
                   <p className="mt-1 text-xs text-muted">
                     Batch {x.answer.batch.status}

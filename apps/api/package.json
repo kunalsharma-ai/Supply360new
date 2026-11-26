@@ -16,6 +16,7 @@
     "load-test": "node --env-file-if-exists=../../.env dist/scripts/load-test.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "1.8.0",
     "@nestjs/common": "12.6.2",
     "@nestjs/core": "12.6.2",
     "@nestjs/platform-express": "12.6.2",

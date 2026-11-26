@@ -25,6 +25,7 @@ const COLUMNS: { table: string; column: string; id: string; context: (id: string
   { table: 'source_connections', column: 'callback_secret_sealed', id: 'id', context: callbackContext },
   { table: 'audience_connections', column: 'secret_sealed', id: 'id', context: madpSecretContext },
   { table: 'sampintel_connections', column: 'token_sealed', id: 'tenant_id', context: (id) => `sampintel:${id}` },
+  { table: 'copilot_ai', column: 'sealed_key', id: 'tenant_id', context: (id) => `copilot-ai:${id}` },
   { table: 'alert_settings', column: 'smtp_password_sealed', id: 'tenant_id', context: (id) => `alerts-smtp:${id}` },
   { table: 'alert_settings', column: 'webhook_url_sealed', id: 'tenant_id', context: (id) => `alerts-webhook:${id}` },
 ];
