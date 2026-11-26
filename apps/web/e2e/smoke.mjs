@@ -130,10 +130,6 @@ await page.goto(`${BASE}/security`);
 await page.getByText('Controls').first().waitFor();
 await axe('security');
 await shot('07-security');
-await page.goto(`${BASE}/copilot`);
-await page.getByText('Arrives in Phase 7').waitFor();
-check('a module not built yet shows its phase, not a mock', true);
-await shot('08-planned-module');
 
 // 7b. Phase 2: projects from SampTrek (FIXTURE), lifecycle, signed webhooks, redirects
 await page.goto(`${BASE}/projects`);
@@ -503,6 +499,62 @@ await card.getByText('Synthetic sessions').waitFor();
 check('the project page shows the synthetic QA card, labelled and separate', (await card.getByText('Never counted as human sample', { exact: false }).count()) >= 1 && (await card.getByText('FIXTURE').count()) >= 1);
 await card.scrollIntoViewIfNeeded();
 await shot('39-project-synthetic-qa');
+
+// Phase 7: delivery and audience intelligence, Copilot, reports
+await page.goto(`${BASE}/intelligence/delivery`);
+await page.getByRole('heading', { name: 'AI Delivery Intelligence' }).waitFor();
+await page.locator('[data-testid=delivery-row]').first().waitFor();
+await page.locator('[data-testid=delivery-row]', { hasText: 'PRX10001' }).getByRole('button', { name: 'PRX10001' }).click();
+await page.locator('[data-testid=forecast-detail]').getByText('Rates behind the forecast').waitFor();
+check('the delivery forecast shows each rate with its sample and basis', (await page.locator('[data-testid=forecast-detail] tbody tr').count()) >= 3);
+await axe('delivery intelligence');
+await shot('40-delivery');
+await page.goto(`${BASE}/intelligence/audience`);
+await page.getByRole('heading', { name: 'AI Audience Intelligence' }).waitFor();
+await page.locator('[data-testid=perf-row]').first().waitFor();
+check('audience intelligence lists panels with denominators', (await page.locator('[data-testid=perf-row]').count()) >= 2);
+await axe('audience intelligence');
+await shot('41-audience-intel');
+
+await page.goto(`${BASE}/copilot`);
+await page.getByRole('heading', { name: 'AI Supply Copilot' }).waitFor();
+const askCopilot = async (q) => {
+  const n = await page.locator('[data-testid=copilot-turn]').count();
+  await page.fill('#copilot-input', q);
+  await page.getByRole('button', { name: 'Send' }).click();
+  await page.locator('[data-testid=copilot-turn]').nth(n).waitFor();
+  return page.locator('[data-testid=copilot-turn]').nth(n);
+};
+const t1 = await askCopilot('How many women in the UK are on Turn2Opinion?');
+check('the Copilot answers an audience count from a typed query', /unique people match/.test(await t1.locator('[data-testid=copilot-answer]').textContent()));
+const t2 = await askCopilot('SELECT * FROM invitations');
+check('the Copilot refuses SQL', (await t2.getByText('refused').count()) === 1);
+await askCopilot('Is PRX10001 at risk?');
+await page.mouse.move(5, 5);
+await axe('copilot');
+await shot('42-copilot');
+await page.getByRole('button', { name: 'Open Copilot' }).click();
+await page.getByRole('dialog').getByText('How many women in the UK are on Turn2Opinion?').first().waitFor();
+check('the Copilot drawer shares the same conversation', true);
+await shot('43-copilot-drawer');
+await page.keyboard.press('Escape');
+
+await page.goto(`${BASE}/reports`);
+await page.getByRole('heading', { name: 'Reports and Analytics' }).waitFor();
+await page.selectOption('#r-kind', 'quotas');
+await page.selectOption('#r-format', 'csv');
+await page.getByRole('button', { name: 'Export' }).click();
+await page.locator('[data-testid=export-row]', { hasText: 'Quotas' }).getByRole('link', { name: 'Download' }).waitFor();
+const dl = await page.evaluate(async () => {
+  const l = await (await fetch('/api/v1/reports/exports')).json();
+  const r = await fetch(`/api/v1/reports/exports/${l.items.find((x) => x.kind === 'quotas').id}/download`);
+  return { type: r.headers.get('content-type'), text: await r.text() };
+});
+check('a quotas CSV export is built and downloads', dl.type.startsWith('text/csv') && dl.text.includes('project,country,group,cell'));
+await page.mouse.move(5, 5);
+await page.locator('[data-sonner-toast]').first().waitFor({ state: 'detached', timeout: 15000 });
+await axe('reports');
+await shot('44-reports');
 
 await page.goto(`${BASE}/integrations/sampcloud`);
 await page.getByText('Blocked in Phase 2').waitFor();

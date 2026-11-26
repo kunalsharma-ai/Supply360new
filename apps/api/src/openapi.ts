@@ -27,6 +27,12 @@ import {
   FlagReview,
   RecontactRequest,
   ReinviteRequest,
+  QaModeUpdate,
+  SampIntelConnectionUpdate,
+  ForecastAssumptions,
+  CopilotAsk,
+  CopilotDecision,
+  ReportRequest,
 } from '@s360/contracts';
 import { z } from 'zod';
 import { Public } from './common/decorators.js';
@@ -193,6 +199,32 @@ export function buildOpenApi() {
       '/sources/{id}/callback-secret': {
         put: op("Set SampTrek's vendor callback secret", 'integrations.manage', CallbackSecret),
       },
+      '/sampintel/connection': {
+        get: op('SampIntel AI link (token never returned)', 'integrations.read'),
+        put: op('Save the SampIntel AI link (FIXTURE or LIVE over HTTPS; token sealed)', 'sampintel.manage', SampIntelConnectionUpdate),
+      },
+      '/sampintel/connection/check': { post: op('Check the SampIntel AI link', 'sampintel.manage') },
+      '/sampintel/projects': { get: op('QA mode of every project', 'projects.read') },
+      '/projects/{id}/qa-mode': { put: op('Set Human only, Synthetic QA only or Both kept separate', 'sampintel.manage', QaModeUpdate) },
+      '/projects/{id}/synthetic-qa': { get: op('Synthetic QA summary, shown beside human sample and never added to it', 'projects.read') },
+      '/intelligence/delivery': { get: op('Delivery forecast for every active project, riskiest first', 'projects.read') },
+      '/projects/{id}/forecast': { get: op('Delivery forecast: rates with denominators, ranges, risk, cells behind, next batch', 'projects.read') },
+      '/intelligence/assumptions': {
+        get: op('Cold-start assumptions', 'projects.read'),
+        put: op('Set cold-start assumptions (audited, with a reason)', 'settings.manage', ForecastAssumptions),
+      },
+      '/intelligence/audience': { get: op('Panel, country and segment performance (?days=1..730)', 'audience.read') },
+      '/intelligence/tick': { post: op('Record forecast snapshots and risk notifications now (not in production)', 'execution.control') },
+      '/copilot': { get: op('Your Copilot history and examples', 'copilot.use') },
+      '/copilot/ask': { post: op('Ask the Copilot; answers come from typed, permission-checked queries', 'copilot.use', CopilotAsk) },
+      '/copilot/{id}/decision': { post: op('Approve or reject a proposed action (a batch needs invitations.dispatch)', 'copilot.use', CopilotDecision) },
+      '/reports/exports': {
+        get: op('Your exports', 'reports.read'),
+        post: op('Queue an export (CSV, Excel or JSON; 24-hour expiry)', 'reports.export', ReportRequest),
+      },
+      '/reports/exports/{id}': { get: op('One export', 'reports.read') },
+      '/reports/exports/{id}/download': { get: op('Download your export until it expires', 'reports.export') },
+      '/reports/tick': { post: op('Build queued exports and expire old ones now (not in production)', 'execution.control') },
       '/execution/tick': { post: op('Run one scheduler pass now (not in production)', 'execution.control') },
       '/i/{tenant}/{token}': {
         get: { ...op('Participation link: records the click and 302s to the approved entry link', null), security: [] },

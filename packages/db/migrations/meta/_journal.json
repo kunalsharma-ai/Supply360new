@@ -85,6 +85,20 @@
       "when": 1795684539564,
       "tag": "0011_sampintel_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1795685932176,
+      "tag": "0012_intelligence",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1795685935378,
+      "tag": "0013_intelligence_rls",
+      "breakpoints": true
     }
   ]
 }

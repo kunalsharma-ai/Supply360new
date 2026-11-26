@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
   boolean,
+  customType,
   index,
   integer,
   bigint,
@@ -793,4 +794,80 @@ export const sampintelConnections = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex('sampintel_tenant').on(t.tenantId)],
+);
+
+// ───────────────────────────── Phase 7: intelligence, Copilot and reports ─────────────────────────────
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => 'bytea' });
+
+/** Module 11: a delivery forecast as it was computed, with its inputs, so a past recommendation can be explained. */
+export const deliveryPredictions = pgTable(
+  'delivery_predictions',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    modelVersion: text('model_version').notNull(),
+    risk: text('risk').notNull(),
+    forecast: jsonb('forecast').notNull(),
+    inputs: jsonb('inputs').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('delivery_predictions_project').on(t.tenantId, t.projectId, t.createdAt.desc())],
+);
+
+/**
+ * Module 24: every Copilot request, the typed query it became, the model version and the rationale. A consequential
+ * action is only proposed here; a person with the right permission approves it, and the normal service then runs it.
+ */
+export const copilotInteractions = pgTable(
+  'copilot_interactions',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    userId: uuid('user_id').notNull(),
+    prompt: text('prompt').notNull(),
+    intent: text('intent').notNull(),
+    query: jsonb('query'),
+    modelVersion: text('model_version').notNull(),
+    rationale: text('rationale').notNull(),
+    /** answered | proposed | approved | rejected | failed | refused */
+    status: text('status').notNull(),
+    action: jsonb('action'),
+    result: jsonb('result'),
+    decidedBy: uuid('decided_by'),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('copilot_user').on(t.tenantId, t.userId, t.createdAt.desc())],
+);
+
+/** Module 29: an asynchronous export. The file is kept until it expires, then removed by the scheduler. */
+export const reportExports = pgTable(
+  'report_exports',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    requestedBy: uuid('requested_by').notNull(),
+    kind: text('kind').notNull(),
+    format: text('format').notNull(),
+    filters: jsonb('filters').notNull().default({}),
+    timezone: text('timezone').notNull().default('UTC'),
+    /** queued | ready | failed | expired */
+    status: text('status').notNull().default('queued'),
+    rows: integer('rows'),
+    fileName: text('file_name'),
+    content: bytea('content'),
+    error: text('error'),
+    downloads: integer('downloads').notNull().default(0),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: createdAt(),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('report_exports_tenant').on(t.tenantId, t.createdAt.desc()),
+    index('report_exports_status').on(t.status, t.createdAt),
+  ],
 );

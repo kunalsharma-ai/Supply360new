@@ -118,10 +118,25 @@ const OPS: Op[] = [
   { name: 'GET /users', weight: 5, run: (c) => fetch(`${BASE}/users?limit=50`, { headers: { cookie: c } }) },
   { name: 'GET /audit', weight: 5, run: (c) => fetch(`${BASE}/audit?limit=50`, { headers: { cookie: c } }) },
   { name: 'GET /notifications', weight: 5, run: (c) => fetch(`${BASE}/notifications`, { headers: { cookie: c } }) },
-  { name: 'GET /projects', weight: 15, run: (c) => fetch(`${BASE}/projects`, { headers: { cookie: c } }) },
+  { name: 'GET /projects', weight: 10, run: (c) => fetch(`${BASE}/projects`, { headers: { cookie: c } }) },
+  {
+    name: 'GET /projects/:id/forecast',
+    weight: 5,
+    run: (c) => fetch(`${BASE}/projects/${source.audienceProject}/forecast`, { headers: { cookie: c } }),
+  },
+  {
+    name: 'POST /copilot/ask',
+    weight: 3,
+    run: (c) =>
+      fetch(`${BASE}/copilot/ask`, {
+        method: 'POST',
+        headers: { ...csrf, cookie: c },
+        body: JSON.stringify({ prompt: any(['Which projects are at risk?', 'Remaining quota for PRX10001', 'How many women in the UK are on Turn2Opinion?']) }),
+      }),
+  },
   {
     name: 'GET /projects/:id',
-    weight: 15,
+    weight: 12,
     run: (c) => fetch(`${BASE}/projects/${any(source.projectIds)}`, { headers: { cookie: c } }),
   },
   {
