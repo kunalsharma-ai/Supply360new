@@ -1,6 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import { parseArgs } from 'node:util';
 import { Secret, TOTP } from 'otpauth';
+import pg from 'pg';
+import { TokenSigner } from '../execution/token.js';
 import { signSampTrek } from '../ingestion/signature.js';
 import { provisionTenant } from './provision.js';
 
@@ -111,7 +113,7 @@ function webhook(): Promise<Response> {
 }
 
 const OPS: Op[] = [
-  { name: 'GET /auth/me', weight: 20, run: (c) => fetch(`${BASE}/auth/me`, { headers: { cookie: c } }) },
+  { name: 'GET /auth/me', weight: 15, run: (c) => fetch(`${BASE}/auth/me`, { headers: { cookie: c } }) },
   { name: 'GET /users', weight: 5, run: (c) => fetch(`${BASE}/users?limit=50`, { headers: { cookie: c } }) },
   { name: 'GET /audit', weight: 5, run: (c) => fetch(`${BASE}/audit?limit=50`, { headers: { cookie: c } }) },
   { name: 'GET /notifications', weight: 5, run: (c) => fetch(`${BASE}/notifications`, { headers: { cookie: c } }) },
@@ -135,6 +137,11 @@ const OPS: Op[] = [
         headers: { ...csrf, cookie: c },
         body: JSON.stringify({ countries: [any(['US', 'GB', 'DE', 'IN'])], panels: ['t2o'] }),
       }),
+  },
+  {
+    name: 'GET /projects/:id/execution',
+    weight: 5,
+    run: (c) => fetch(`${BASE}/projects/${source.audienceProject}/execution`, { headers: { cookie: c } }),
   },
   { name: 'POST reserve + release', weight: 5, run: (c) => reserveRelease(c) },
   { name: 'POST signed webhook', weight: 5, run: () => webhook() },
@@ -290,8 +297,91 @@ const capped = await post(
 );
 if (!mapped.ok || !capped.ok) throw new Error(`audience setup ${mapped.status} ${capped.status}`);
 
-const results = [];
+const MIX = OPS.map((o) => `${o.weight}% ${o.name}`);
+const results: Awaited<ReturnType<typeof level>>[] = [];
 for (const c of LEVELS) results.push(await level(c, cookies));
+
+// Phase 4: the click path on its own. It is the busiest route once invitations go out: no session, one signed token
+// check, a row lock on the invitation, the reminder cancel and a router event, then a 302 to the entry link.
+const pid = source.audienceProject;
+const detail = (await (await fetch(`${BASE}/projects/${pid}`, { headers: { cookie: adminCookie } })).json()) as {
+  markets: { countryCode: string }[];
+};
+for (const m of detail.markets)
+  await post(
+    `/projects/${pid}/markets/${m.countryCode}/entry-link`,
+    { entryUrl: `https://st.example/s/${m.countryCode}?uid=[UID]` },
+    'PUT',
+  );
+const all = (await (await fetch(`${BASE}/projects/${pid}/quotas`, { headers: { cookie: adminCookie } })).json()) as {
+  cells: { id: string; name: string; isMarketCell: boolean }[];
+};
+await post(`/projects/${pid}/lifecycle`, { action: 'mark_ready', reason: 'load test' });
+for (const c of all.cells) {
+  if (c.id !== source.audienceCell)
+    await post(`/projects/${pid}/quotas/${c.id}/mapping`, { criteria: { panels: ['t2o'] } }, 'PUT');
+}
+await post(
+  `/projects/${pid}/allocation`,
+  { mode: 'proportional', caps: Object.fromEntries(all.cells.map((c) => [c.id, 100_000])) },
+  'PUT',
+);
+for (const c of all.cells) await post(`/projects/${pid}/quotas/${c.id}/reserve`, { count: 2000 });
+const launched = await post(`/projects/${pid}/lifecycle`, { action: 'launch', reason: 'load test' });
+if (!launched.ok) throw new Error(`launch ${launched.status}: ${await launched.text()}`);
+const pol = await post(
+  `/projects/${pid}/execution/policy`,
+  {
+    mode: 'manual',
+    batchSize: 5000,
+    dailyMax: 1_000_000,
+    reviewIntervalMinutes: 60,
+    quietStartHour: 0,
+    quietEndHour: 0,
+    timezone: 'UTC',
+    reminderOffsetsHours: [24, 72],
+    allowedPanels: ['t2o'],
+    linkValidDays: 7,
+    escalateRefusalPercent: 100,
+    reason: 'load test',
+  },
+  'PUT',
+);
+if (!pol.ok) throw new Error(`policy ${pol.status}: ${await pol.text()}`);
+const batchMs: number[] = [];
+let invited = 0;
+for (const c of all.cells) {
+  const s = performance.now();
+  const b = await post(`/projects/${pid}/batches`, { cellId: c.id, size: 5000, reason: 'load test' });
+  if (!b.ok) throw new Error(`batch ${b.status}: ${await b.text()}`);
+  invited += ((await b.json()) as { sent: number }).sent;
+  batchMs.push(performance.now() - s);
+}
+const secret = process.env.PARTICIPATION_TOKEN_SECRET ?? process.env.SESSION_SECRET;
+if (!secret) throw new Error('SESSION_SECRET is required to build participation links (run with the API .env)');
+const signer = new TokenSigner(secret);
+const pgc = new pg.Client({ connectionString: adminUrl });
+await pgc.connect();
+const ids = (
+  await pgc.query<{ id: string }>("select id from invitations where tenant_id = $1 and status = 'sent'", [tenantId])
+).rows;
+await pgc.end();
+const links = ids.map((r) => `${BASE}/i/${slug}/${signer.sign(r.id)}`);
+const BROWSER =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 15_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/19.0 Safari/605.1.15';
+OPS.splice(0, OPS.length, {
+  name: 'GET /i/:tenant/:token (click)',
+  weight: 100,
+  run: async () => {
+    const r = await fetch(any(links), { redirect: 'manual', headers: { 'user-agent': BROWSER } });
+    // A 302 to the approved entry link is the success answer here.
+    return r.status === 302 && r.headers.get('location')?.startsWith('https://st.example/')
+      ? new Response(null, { status: 200 })
+      : new Response(null, { status: r.status === 302 ? 409 : r.status });
+  },
+});
+const clicks: Awaited<ReturnType<typeof level>>[] = [];
+for (const c of LEVELS) clicks.push(await level(c, cookies));
 const report = {
   at: new Date().toISOString(),
   base: values.base,
@@ -304,20 +394,29 @@ const report = {
     p50: Number(pct(signInTimes, 50).toFixed(0)),
     p95: Number(pct(signInTimes, 95).toFixed(0)),
   },
-  mix: OPS.map((o) => `${o.weight}% ${o.name}`),
+  mix: MIX,
   results,
+  clickPath: { invitations: invited, batches: batchMs.map((x) => Math.round(x)), results: clicks },
 };
 if (values.json) console.log(JSON.stringify(report, null, 2));
 else {
   console.log(`Load test ${report.at} against ${report.base} (tenant ${slug}, ${n} people)`);
   console.log(`Sign-in with MFA, ${n - 1} at once: p50 ${report.signIn.p50} ms, p95 ${report.signIn.p95} ms`);
   console.log('conc  req/s  requests  errors   p50 ms  p95 ms  p99 ms  statuses');
-  for (const r of results)
-    console.log(
-      `${String(r.concurrency).padStart(4)}  ${String(r.rps).padStart(5)}  ${String(r.requests).padStart(8)}  ${String(r.errors).padStart(6)}  ${String(r.p50).padStart(7)} ${String(r.p95).padStart(7)} ${String(r.p99).padStart(7)}  ${Object.entries(
-        r.statuses,
-      )
-        .map(([k, v]) => `${k}:${v}`)
-        .join(' ')}`,
-    );
+  const table = (rows: typeof results) => {
+    for (const r of rows)
+      console.log(
+        `${String(r.concurrency).padStart(4)}  ${String(r.rps).padStart(5)}  ${String(r.requests).padStart(8)}  ${String(r.errors).padStart(6)}  ${String(r.p50).padStart(7)} ${String(r.p95).padStart(7)} ${String(r.p99).padStart(7)}  ${Object.entries(
+          r.statuses,
+        )
+          .map(([k, v]) => `${k}:${v}`)
+          .join(' ')}`,
+      );
+  };
+  table(results);
+  console.log(
+    `\nClick path only (${invited} invitations, batches of up to 5000 sent in ${batchMs.map((x) => Math.round(x)).join(' / ')} ms):`,
+  );
+  console.log('conc  req/s  requests  errors   p50 ms  p95 ms  p99 ms  statuses');
+  table(clicks);
 }

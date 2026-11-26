@@ -18,6 +18,10 @@ import { ProjectsController } from './ingestion/projects.controller.js';
 import { RedirectController } from './ingestion/redirect.controller.js';
 import { SourcesController } from './ingestion/sources.controller.js';
 import { WebhookController } from './ingestion/webhook.controller.js';
+import { ExecutionController } from './execution/execution.controller.js';
+import { ExecutionService } from './execution/execution.service.js';
+import { RouterController } from './execution/router.controller.js';
+import { DispatchScheduler } from './execution/scheduler.js';
 import { HealthController } from './health/health.controller.js';
 import { NotificationsController } from './notifications/notifications.controller.js';
 import { OpenApiController } from './openapi.js';
@@ -45,6 +49,8 @@ export class AppModule {
         IngestionService,
         AudienceService,
         SourcePoller,
+        ExecutionService,
+        DispatchScheduler,
         { provide: APP_GUARD, useClass: ThrottlerGuard },
         { provide: APP_GUARD, useClass: SessionGuard },
         { provide: APP_FILTER, useClass: ProblemFilter },
@@ -64,6 +70,8 @@ export class AppModule {
         RedirectController,
         AudienceController,
         QuotasController,
+        ExecutionController,
+        RouterController,
       ],
     };
   }

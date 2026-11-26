@@ -466,3 +466,172 @@ export const reservedRefs = pgTable(
     index('reserved_refs_cell').on(t.cellId, t.expiresAt),
   ],
 );
+
+// ───────────────────────────── Phase 4: invitations and execution modes ─────────────────────────────
+// Invitations hold MADP references and MADP invitation ids only. Participation tokens are derived with an HMAC
+// from the invitation id, so they are never stored and carry no personal data.
+
+/** Per-project execution policy. Every change bumps the version, and batches record the version they ran under. */
+export const executionPolicies = pgTable('execution_policies', {
+  projectId: uuid('project_id')
+    .primaryKey()
+    .references(() => projects.id, { onDelete: 'cascade' }),
+  tenantId: tenantId(),
+  mode: text('mode').notNull().default('manual'),
+  batchSize: integer('batch_size').notNull(),
+  dailyMax: integer('daily_max').notNull(),
+  reviewIntervalMinutes: integer('review_interval_minutes').notNull(),
+  quietStartHour: integer('quiet_start_hour').notNull(),
+  quietEndHour: integer('quiet_end_hour').notNull(),
+  timezone: text('timezone').notNull(),
+  reminderOffsetsHours: jsonb('reminder_offsets_hours').notNull(),
+  allowedPanels: jsonb('allowed_panels').notNull(),
+  linkValidDays: integer('link_valid_days').notNull(),
+  /** Automatic mode stops proposing and asks a person when more than this share of a batch is refused. */
+  escalateRefusalPercent: integer('escalate_refusal_percent').notNull(),
+  /** Set when automatic mode escalated; it sends nothing new until a person saves the policy again. */
+  escalatedAt: timestamp('escalated_at', { withTimezone: true }),
+  escalationReason: text('escalation_reason'),
+  version: integer('version').notNull().default(1),
+  lastReviewAt: timestamp('last_review_at', { withTimezone: true }),
+  updatedBy: uuid('updated_by'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Tenant-wide kill switch: while halted nothing is sent, scheduled or reminded, in any mode. */
+export const executionControls = pgTable('execution_controls', {
+  tenantId: uuid('tenant_id')
+    .primaryKey()
+    .references(() => tenants.id, { onDelete: 'restrict' }),
+  halted: boolean('halted').notNull().default(false),
+  reason: text('reason'),
+  updatedBy: uuid('updated_by'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const invitationBatches = pgTable(
+  'invitation_batches',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    cellId: uuid('cell_id')
+      .notNull()
+      .references(() => quotaCells.id, { onDelete: 'cascade' }),
+    size: integer('size').notNull(),
+    status: text('status').notNull(),
+    mode: text('mode').notNull(),
+    policyVersion: integer('policy_version').notNull(),
+    /** person or system */
+    origin: text('origin').notNull(),
+    scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
+    approvedBy: uuid('approved_by'),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    reason: text('reason'),
+    blockedReason: text('blocked_reason'),
+    authorized: integer('authorized').notNull().default(0),
+    refused: integer('refused').notNull().default(0),
+    sent: integer('sent').notNull().default(0),
+    createdBy: uuid('created_by'),
+    createdAt: createdAt(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('invitation_batches_project').on(t.tenantId, t.projectId, t.createdAt.desc()),
+    index('invitation_batches_due').on(t.status, t.scheduledAt),
+  ],
+);
+
+/** One invitation per MADP reference per project, whatever batch, mode or retry led to it. */
+export const invitations = pgTable(
+  'invitations',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    cellId: uuid('cell_id')
+      .notNull()
+      .references(() => quotaCells.id, { onDelete: 'cascade' }),
+    batchId: uuid('batch_id')
+      .notNull()
+      .references(() => invitationBatches.id, { onDelete: 'cascade' }),
+    ref: text('ref').notNull(),
+    panel: text('panel').notNull(),
+    countryCode: text('country_code').notNull(),
+    madpInvitationId: text('madp_invitation_id').notNull(),
+    status: text('status').notNull(),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    clickedAt: timestamp('clicked_at', { withTimezone: true }),
+    /** Outbox: when MADP acknowledged the click event. Null with a click means it is still to be reported. */
+    clickReportedAt: timestamp('click_reported_at', { withTimezone: true }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('invitations_click_outbox').on(t.tenantId, t.clickedAt).where(sql`click_reported_at is null and clicked_at is not null`),
+    uniqueIndex('invitations_project_ref').on(t.projectId, t.ref),
+    index('invitations_batch').on(t.batchId),
+  ],
+);
+
+export const reminderJobs = pgTable(
+  'reminder_jobs',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    invitationId: uuid('invitation_id')
+      .notNull()
+      .references(() => invitations.id, { onDelete: 'cascade' }),
+    attempt: integer('attempt').notNull(),
+    dueAt: timestamp('due_at', { withTimezone: true }).notNull(),
+    /** pending → sent | cancelled | skipped | blocked */
+    status: text('status').notNull().default('pending'),
+    reason: text('reason'),
+    doneAt: timestamp('done_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('reminder_jobs_attempt').on(t.invitationId, t.attempt),
+    index('reminder_jobs_due').on(t.status, t.dueAt),
+  ],
+);
+
+/** Every hand-off to the delivery channel, once per idempotency key, so a retry never sends twice. */
+export const deliveryAttempts = pgTable(
+  'delivery_attempts',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    invitationId: uuid('invitation_id')
+      .notNull()
+      .references(() => invitations.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    idempotencyKey: text('idempotency_key').notNull(),
+    /** accepted | unavailable */
+    status: text('status').notNull(),
+    detail: text('detail'),
+    at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('delivery_attempts_key').on(t.tenantId, t.idempotencyKey)],
+);
+
+/** What the survey router did with each participation link: click, prefetch by a link scanner, or refusal. */
+export const routerEvents = pgTable(
+  'router_events',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+    invitationId: uuid('invitation_id').references(() => invitations.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    reason: text('reason'),
+    at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('router_events_recent').on(t.tenantId, t.at.desc())],
+);

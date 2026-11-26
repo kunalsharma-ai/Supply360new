@@ -2,7 +2,7 @@ import type { AudienceCriteria } from '@s360/contracts';
 import type { z } from 'zod';
 import { madpHeaders } from './signing.js';
 import { AudienceError, type AudienceSource } from './source.js';
-import { MdAttributes, MdCounts, MdMatch, MdReleased, MdReservation } from './types.js';
+import { MdAttributes, MdAuthorize, MdConsent, MdCounts, MdMatch, MdParticipation, MdReleased, MdReservation } from './types.js';
 
 const PREFIX = '/api/v1/supply360';
 const TIMEOUT_MS = 10_000;
@@ -82,5 +82,14 @@ export class LiveMadp implements AudienceSource {
   }
   async release(id: string) {
     await this.call('DELETE', `/reservations/${encodeURIComponent(id)}`, MdReleased);
+  }
+  authorize(q: { reservationId: string; refs: string[] }, idempotencyKey: string) {
+    return this.call('POST', '/invitations/authorize', MdAuthorize, q, idempotencyKey);
+  }
+  consent(refs: string[]) {
+    return this.call('POST', '/consent/check', MdConsent, { refs, purpose: 'survey_invitation' });
+  }
+  participation(events: { eventId: string; invitationId: string; event: string; occurredAt: string }[]) {
+    return this.call('POST', '/participation/events', MdParticipation, { events });
   }
 }

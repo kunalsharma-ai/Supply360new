@@ -26,7 +26,7 @@ export interface ModuleDef {
 }
 
 /** The last delivered phase. Phases up to and including it show as done on the status pages. */
-export const CURRENT_PHASE = 3;
+export const CURRENT_PHASE = 4;
 
 export const MODULES: ModuleDef[] = [
   {
@@ -176,6 +176,7 @@ export const MODULES: ModuleDef[] = [
     group: 'Dispatch',
     href: '/invitations',
     phase: 4,
+    ready: true,
     permission: 'projects.read',
     summary: 'Bounded batches through MADP delivery.',
   },
@@ -186,6 +187,7 @@ export const MODULES: ModuleDef[] = [
     group: 'Dispatch',
     href: '/reminders',
     phase: 4,
+    ready: true,
     permission: 'projects.read',
     summary: 'Reminders only to the invited who have not clicked.',
   },
@@ -196,6 +198,7 @@ export const MODULES: ModuleDef[] = [
     group: 'Dispatch',
     href: '/schedule',
     phase: 4,
+    ready: true,
     permission: 'projects.read',
     summary: 'Calendar, quiet hours and approved launch times.',
   },
@@ -206,6 +209,7 @@ export const MODULES: ModuleDef[] = [
     group: 'Dispatch',
     href: '/router',
     phase: 4,
+    ready: true,
     permission: 'projects.read',
     summary: 'Signed opaque participation tokens to approved links.',
   },
@@ -287,6 +291,7 @@ export const MODULES: ModuleDef[] = [
     group: 'Intelligence',
     href: '/automation',
     phase: 4,
+    ready: true,
     permission: 'automation.manage',
     summary: 'Manual, semi-automatic and automatic policies and approvals.',
   },

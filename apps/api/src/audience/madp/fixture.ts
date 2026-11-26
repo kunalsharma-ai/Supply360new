@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { AudienceCriteria, PanelCode } from '@s360/contracts';
 import { AudienceError, type AudienceSource } from './source.js';
-import type { MdAttributes, MdCounts, MdMatch, MdReservation } from './types.js';
+import type { MdAttributes, MdAuthorize, MdConsent, MdCounts, MdMatch, MdParticipation, MdReservation } from './types.js';
 
 /**
  * FIXTURE mode: a labelled DEMO population answering exactly like MADP's service API, used until MADP issues
@@ -162,13 +162,30 @@ interface Hold {
 interface Store {
   holds: Map<string, Hold>;
   idem: Map<string, MdReservation>;
+  authIdem: Map<string, MdAuthorize>;
+  /** reservation id + membership → MADP invitation id */
+  invitations: Map<string, string>;
+  /** References whose survey consent was withdrawn (tests and demos only). */
+  withdrawn: Set<string>;
+  events: Map<string, string>;
 }
 const stores = new Map<string, Store>();
 const storeFor = (connectionId: string) => {
   let s = stores.get(connectionId);
-  if (!s) stores.set(connectionId, (s = { holds: new Map(), idem: new Map() }));
+  if (!s)
+    stores.set(
+      connectionId,
+      (s = { holds: new Map(), idem: new Map(), authIdem: new Map(), invitations: new Map(), withdrawn: new Set(), events: new Map() }),
+    );
   return s;
 };
+
+/** Withdraws survey consent for one reference, as a panel member could at any time. */
+export function fixtureWithdrawConsent(connectionId: string, ref: string) {
+  storeFor(connectionId).withdrawn.add(ref);
+}
+/** Participation events MADP received, for tests: event id → event. */
+export const fixtureEvents = (connectionId: string) => storeFor(connectionId).events;
 
 export class FixtureMadp implements AudienceSource {
   readonly mode = 'fixture' as const;
@@ -331,5 +348,75 @@ export class FixtureMadp implements AudienceSource {
     if (!h) throw new AudienceError('MADP HTTP 404: No such reservation', false, 404);
     if (h.status !== 'active') throw new AudienceError(`MADP HTTP 409: This reservation is ${h.status}`, false, 409);
     h.status = 'released';
+  }
+
+  private gateOf(ref: string): string | null {
+    const m = refIndex().get(ref);
+    if (!m) return 'unknown_ref';
+    if (this.store.withdrawn.has(ref)) return 'no_consent';
+    const [, n, panel] = /^fx-m-(\d+)-(\w+)$/.exec(m)!;
+    return fixturePopulation()[Number(n)]!.memberships.find((x) => x.panel === panel)!.gate;
+  }
+
+  async authorize(q: { reservationId: string; refs: string[] }, key: string): Promise<MdAuthorize> {
+    const prior = this.store.authIdem.get(key);
+    if (prior) return structuredClone(prior);
+    const h = this.store.holds.get(q.reservationId);
+    if (!h) throw new AudienceError('MADP HTTP 404: No such reservation', false, 404);
+    if (h.status !== 'active' || h.expiresAt <= Date.now())
+      throw new AudienceError('MADP HTTP 409: This reservation is not active', false, 409);
+    const out: MdAuthorize = { reservationId: h.id, authorized: [], refused: [] };
+    for (const ref of [...new Set(q.refs)]) {
+      const m = refIndex().get(ref);
+      if (!m || !h.memberships.has(m)) {
+        out.refused.push({ ref, reason: 'not_in_reservation' });
+        continue;
+      }
+      const reason = this.gateOf(ref);
+      if (reason) {
+        out.refused.push({ ref, reason });
+        continue;
+      }
+      const k = `${h.id}/${m}`;
+      let id = this.store.invitations.get(k);
+      if (!id) this.store.invitations.set(k, (id = randomUUID()));
+      out.authorized.push({ ref, invitationId: id });
+    }
+    this.store.authIdem.set(key, out);
+    return structuredClone(out);
+  }
+
+  async consent(refs: string[]): Promise<MdConsent> {
+    const known = refs.filter((r) => refIndex().has(r));
+    return {
+      purpose: 'survey_invitation',
+      results: known.map((ref) => {
+        const reason = this.gateOf(ref);
+        const m = refIndex().get(ref)!;
+        return {
+          ref,
+          panel: m.split('-').at(-1)!,
+          consent: this.store.withdrawn.has(ref) ? 'withdrawn' : 'granted',
+          eligible: !reason,
+        };
+      }),
+      unknownRefs: refs.filter((r) => !refIndex().has(r)),
+    };
+  }
+
+  async participation(events: { eventId: string; invitationId: string; event: string }[]): Promise<MdParticipation> {
+    const known = new Set(this.store.invitations.values());
+    let accepted = 0;
+    let duplicates = 0;
+    let unknown = 0;
+    for (const e of events) {
+      if (!known.has(e.invitationId)) unknown++;
+      else if (this.store.events.has(e.eventId)) duplicates++;
+      else {
+        this.store.events.set(e.eventId, e.event);
+        accepted++;
+      }
+    }
+    return { accepted, duplicates, unknownInvitations: unknown };
   }
 }

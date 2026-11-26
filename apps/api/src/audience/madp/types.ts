@@ -88,3 +88,24 @@ export const MdReservationState = z.looseObject({
 });
 
 export const MdReleased = z.looseObject({ reservationId: z.string(), status: z.literal('released') });
+
+export const MdAuthorize = z.looseObject({
+  reservationId: z.string(),
+  authorized: z.array(z.looseObject({ ref: z.string(), invitationId: z.string().min(1) })),
+  refused: z.array(z.looseObject({ ref: z.string(), reason: z.string() })),
+});
+export type MdAuthorize = z.infer<typeof MdAuthorize>;
+
+export const MdConsent = z.looseObject({
+  purpose: z.string(),
+  results: z.array(z.looseObject({ ref: z.string(), panel: z.string(), consent: z.string(), eligible: z.boolean() })),
+  unknownRefs: z.array(z.string()),
+});
+export type MdConsent = z.infer<typeof MdConsent>;
+
+export const MdParticipation = z.looseObject({
+  accepted: z.number().int(),
+  duplicates: z.number().int(),
+  unknownInvitations: z.number().int(),
+});
+export type MdParticipation = z.infer<typeof MdParticipation>;
