@@ -8,6 +8,7 @@ import { schedulerDuration, schedulerLastSuccess, schedulerRuns } from '../metri
 import { FieldworkService } from '../fieldwork/fieldwork.service.js';
 import { IntelligenceService } from '../intelligence/intelligence.service.js';
 import { ReportsService } from '../reports/reports.service.js';
+import { AlertsService } from '../alerts/alerts.service.js';
 import { ExecutionService } from './execution.service.js';
 
 const LOCK = 360_004;
@@ -31,6 +32,7 @@ export class DispatchScheduler implements OnApplicationBootstrap, OnApplicationS
     private readonly fieldwork: FieldworkService,
     private readonly intelligence: IntelligenceService,
     private readonly reports: ReportsService,
+    private readonly alerts: AlertsService,
   ) {}
 
   onApplicationBootstrap() {
@@ -61,6 +63,7 @@ export class DispatchScheduler implements OnApplicationBootstrap, OnApplicationS
             await this.fieldwork.autoReconcile(t.id, this.env.RECONCILE_MINUTES);
             await this.intelligence.tick(t.id);
             await this.reports.tick(t.id);
+            await this.alerts.tick(t.id);
           } catch (e) {
             tenantErrors++;
             this.log.error(`${t.slug}: ${(e as Error).message}`);

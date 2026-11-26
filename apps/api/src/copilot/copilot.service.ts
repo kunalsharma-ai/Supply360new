@@ -11,6 +11,9 @@ import { batchView, ExecutionService } from '../execution/execution.service.js';
 import { FieldworkService } from '../fieldwork/fieldwork.service.js';
 import { IntelligenceService } from '../intelligence/intelligence.service.js';
 import { ReportsService } from '../reports/reports.service.js';
+import { AI_VERSION_PREFIX, CopilotAiService } from './ai/copilot-ai.service.js';
+import { extractJson, ModelUnavailable } from './ai/providers.js';
+import { checkedTranslation, toParsed, translatePrompt, understandPrompt } from './ai/understand.js';
 import { COPILOT_VERSION, describe, EXAMPLES, parse, PERMISSION_FOR, type Parsed } from './parse.js';
 
 type Interaction = typeof copilotInteractions.$inferSelect;
@@ -52,6 +55,7 @@ export class CopilotService {
     private readonly fieldwork: FieldworkService,
     private readonly intelligence: IntelligenceService,
     private readonly reports: ReportsService,
+    private readonly ai: CopilotAiService,
   ) {}
 
   history(ctx: RequestContext) {
@@ -70,7 +74,26 @@ export class CopilotService {
     const codes = await withTenant(this.db, ctx.tenantId, async (tx) =>
       (await tx.select({ c: projects.projectCode }).from(projects)).map((x) => x.c),
     );
-    const parsed = parse(prompt, codes);
+    let parsed = parse(prompt, codes);
+    let modelVersion = COPILOT_VERSION;
+    let language = 'en';
+    // The rules always run first: a refusal stands whatever the model says. With an AI set up, the model reads the
+    // question (in any language) into the same typed, read-only questions, and the answer is put back in that language.
+    const conn = parsed.intent === 'refused' ? null : await this.ai.active(ctx.tenantId);
+    if (conn) {
+      try {
+        const c = await this.ai.complete(conn, understandPrompt(prompt, codes));
+        const r = toParsed(extractJson(c.text), codes);
+        modelVersion = `${AI_VERSION_PREFIX}${c.modelVersion}`;
+        if (r) {
+          parsed = r.parsed;
+          language = r.language;
+        } else parsed = { ...parsed, rationale: `${parsed.rationale} (The AI reply did not fit; the rules answered.)` };
+      } catch (e) {
+        const why = e instanceof ModelUnavailable ? e.reason.replaceAll('_', ' ') : 'error';
+        parsed = { ...parsed, rationale: `${parsed.rationale} (The AI was unavailable: ${why}; the rules answered.)` };
+      }
+    }
     let status = 'answered';
     let answer: Answer;
     const need = PERMISSION_FOR[parsed.intent];
@@ -90,6 +113,18 @@ export class CopilotService {
         answer = { text: `That could not be answered: ${detail}` };
       }
     }
+    let textEn: string | null = null;
+    if (conn && language !== 'en' && status !== 'refused') {
+      try {
+        const t = checkedTranslation(answer.text, await this.ai.complete(conn, translatePrompt(answer.text, language)));
+        if (t) {
+          textEn = answer.text;
+          answer = { ...answer, text: t };
+        }
+      } catch {
+        // The English answer stands.
+      }
+    }
     const row = await withTenant(this.db, ctx.tenantId, async (tx) => {
       const [r] = await tx
         .insert(copilotInteractions)
@@ -99,18 +134,18 @@ export class CopilotService {
           prompt,
           intent: parsed.intent,
           query: queryOf(parsed),
-          modelVersion: COPILOT_VERSION,
+          modelVersion,
           rationale: parsed.rationale,
           status,
           action: answer.action ?? null,
-          result: { text: answer.text, data: answer.data ?? null },
+          result: { text: answer.text, ...(textEn ? { textEn, language } : {}), data: answer.data ?? null },
         })
         .returning();
       await this.audit.write(tx, actorOf(ctx), {
         action: 'copilot.asked',
         targetType: 'copilot_interaction',
         targetId: r!.id,
-        details: { intent: parsed.intent, status, modelVersion: COPILOT_VERSION },
+        details: { intent: parsed.intent, status, modelVersion, language },
       });
       return r!;
     });

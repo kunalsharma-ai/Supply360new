@@ -1,5 +1,6 @@
 'use client';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AlertSettingsCard } from '@/components/alerts/alert-settings';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -62,6 +63,7 @@ export default function NotificationsPage() {
           </ul>
         )}
       </Card>
+      <AlertSettingsCard />
     </>
   );
 }
