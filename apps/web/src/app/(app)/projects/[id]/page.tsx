@@ -232,7 +232,15 @@ export default function ProjectPage() {
         </Card>
 
         <Card>
-          <CardHeader title="Launch checks" description="Checked by the server before Mark ready, Launch and Resume." />
+          <CardHeader
+            title="Launch checks"
+            description="Checked by the server. Quota mapping and audience are needed to launch or resume, not to mark ready."
+            action={
+              <Button asChild size="sm" variant="ghost">
+                <Link href={`/quotas?project=${d.id}`}>Quotas and audience</Link>
+              </Button>
+            }
+          />
           <ul className="divide-y divide-border">
             {d.checks.map((c) => (
               <li key={c.key} className="flex items-start gap-2.5 px-5 py-3 text-sm">
@@ -248,7 +256,13 @@ export default function ProjectPage() {
                   {c.pendingPhase ? (
                     <p className="text-xs text-muted">Arrives in Phase {c.pendingPhase}</p>
                   ) : (
-                    !c.ok && c.detail && <p className="text-xs text-muted">{c.detail}</p>
+                    !c.ok &&
+                    c.detail && (
+                      <p className="text-xs text-muted">
+                        {c.detail}
+                        {c.stage === 'launch' && ' · needed to launch'}
+                      </p>
+                    )
                   )}
                 </div>
               </li>

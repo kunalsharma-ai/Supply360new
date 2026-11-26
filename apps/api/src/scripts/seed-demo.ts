@@ -1,5 +1,5 @@
 import { ROLE_LABELS, Role } from '@s360/contracts';
-import { createDb, createPool, notifications, sourceConnections, tenants, users } from '@s360/db';
+import { audienceConnections, createDb, createPool, notifications, sourceConnections, tenants, users } from '@s360/db';
 import { randomBytes } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { AuditService } from '../audit/audit.service.js';
@@ -45,7 +45,7 @@ await db.insert(notifications).values({
   kind: 'system',
   severity: 'info',
   title: 'DEMO workspace',
-  body: 'This workspace holds fictional accounts only. SampTrek is connected in FIXTURE mode with labelled sample projects.',
+  body: 'This workspace holds fictional accounts only. SampTrek and MADP are connected in FIXTURE mode with labelled sample projects and a DEMO population.',
 });
 
 // A FIXTURE SampTrek connection with its sample projects imported, so the Phase 2 screens have something to show.
@@ -69,6 +69,9 @@ const sync = await new IngestionService(db, { FIELD_ENCRYPTION_KEY: key } as Env
 console.log(
   `FIXTURE SampTrek backfill: ${sync.created} projects imported${sync.ok ? '' : `, errors: ${sync.errors.join('; ')}`}`,
 );
+// A FIXTURE MADP connection: a labelled DEMO population, so audience counts and reservations work in the demo.
+await db.insert(audienceConnections).values({ tenantId, mode: 'fixture', name: 'MADP (FIXTURE)' });
+console.log('FIXTURE MADP connected (DEMO population).');
 const [t] = await db.select().from(tenants).where(eq(tenants.id, tenantId));
 console.log(`DEMO tenant ${t?.slug} seeded with ${Role.options.length} accounts.`);
 await pool.end();

@@ -93,7 +93,7 @@ Flags: `--base`, `--users`, `--levels`, `--duration`, `--json`.
 
 ## Phase 2: SampTrek project ingestion
 
-- **Sources** (`/sources`, screen *SampTrek Integration*): a connection is FIXTURE (labelled sample projects shaped
+- **Sources** (`/sources`, screen _SampTrek Integration_): a connection is FIXTURE (labelled sample projects shaped
   exactly like SampTrek's public API) or LIVE (`pjx_` key with `projects:read sessions:read quotas:read`, sealed at
   rest). Supply360 never calls SampTrek's write endpoints.
 - **Polling and backfill**: `POST /sources/:id/sync` (`{"full":true}` for a backfill) and a poller every
@@ -111,3 +111,25 @@ Flags: `--base`, `--users`, `--levels`, `--duration`, `--json`.
   redirect.
 - The demo seed creates a FIXTURE connection and imports its projects. It needs the same `FIELD_ENCRYPTION_KEY` as the
   API.
+
+## Phase 3: audience and quotas from MADP
+
+- **MADP connection** (`/integrations/madp`): FIXTURE uses a labelled DEMO population of 6,000 fictional people across
+  Turn2Opinion, MFR and MHO, many in more than one panel. LIVE calls MADP's Supply360 service API with its exact
+  signing (`x-madp-client`, `x-madp-timestamp`, `x-madp-nonce`, `x-madp-signature: v1=…`), a fresh nonce per call and an
+  `idempotency-key` on reservations. The client secret is sealed at rest. LIVE has only been run against a local stub
+  that verifies signatures the way MADP does, because no service client has been issued yet.
+- **Audience Finder, Filter and Segments** (`/audience/*`): counts from MADP. Supply360 plans with `uniquePeople`, which
+  counts a person in two panels once; memberships are shown beside it, never added up. Special-category (health)
+  attributes are never offered and are refused by the API.
+- **Quota cells** come from SampTrek's `GET /projects/{ref}/quotas` for Supply360's own markets; a market without cells
+  gets one whole-market cell. A person maps each cell to MADP criteria with exactly one panel (MADP issues one reference
+  per panel membership, so one panel per project keeps anyone from being invited twice). A change to a cell's conditions at
+  SampTrek clears its mapping.
+- **Allocation** (`/allocation`): proportional, equal or manual split of Supply360's market target per SampTrek group, and a
+  cap on people held per cell.
+- **Reservations** (`/quotas`): MADP match then reserve, under the project row lock, so concurrent requests never hold more
+  than a cell's cap; a unique (project, reference) index means one reference is never held twice. Every selection is kept
+  as an immutable snapshot. Launch and Resume now need every open cell mapped and holding people.
+- Known MADP gaps: no attribute values list, no nested filter groups, no person-level key in match, no dispatch or
+  delivery callbacks yet.

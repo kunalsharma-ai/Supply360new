@@ -85,7 +85,8 @@ export function transition(
     };
   }
   if (r.needsChecks) {
-    const failed = checks.filter((c) => !c.ok && !c.pendingPhase);
+    // Marking ready needs the project itself in order; quota mapping and audience are needed to launch.
+    const failed = checks.filter((c) => !c.ok && !c.pendingPhase && !(action === 'mark_ready' && c.stage === 'launch'));
     if (failed.length) {
       return { ok: false, code: 'launch_checks', detail: failed.map((c) => c.label).join('; ') };
     }

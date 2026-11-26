@@ -104,4 +104,6 @@ export interface LaunchCheck {
   detail?: string;
   /** A check owned by a later phase: shown, never counted as passed. */
   pendingPhase?: number;
+  /** 'launch': needed to launch or resume, not to mark a project ready (quota mapping and audience). */
+  stage?: 'launch';
 }

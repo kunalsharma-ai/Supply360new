@@ -1,5 +1,5 @@
 import { SourceError, type ProjectSource } from '../adapter.js';
-import { StListItem, StPage, StProject } from './types.js';
+import { StListItem, StPage, StProject, StQuotas } from './types.js';
 
 const TIMEOUT_MS = 10_000;
 
@@ -57,6 +57,14 @@ export class LiveSampTrek implements ProjectSource {
     if (body === null) return null;
     const parsed = StProject.safeParse(body);
     if (!parsed.success) throw new SourceError('SampTrek project has an unexpected shape', false);
+    return parsed.data;
+  }
+
+  async getQuotas(ref: string) {
+    const body = await this.get(`/projects/${encodeURIComponent(ref)}/quotas`);
+    if (body === null) return null;
+    const parsed = StQuotas.safeParse(body);
+    if (!parsed.success) throw new SourceError('SampTrek quotas have an unexpected shape', false);
     return parsed.data;
   }
 }

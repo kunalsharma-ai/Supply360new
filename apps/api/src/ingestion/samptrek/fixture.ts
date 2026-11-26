@@ -1,5 +1,5 @@
 import type { ProjectSource } from '../adapter.js';
-import { StProject, type StListItem } from './types.js';
+import { StProject, StQuotas, type StListItem } from './types.js';
 
 /**
  * FIXTURE mode: labelled sample projects shaped exactly like SampTrek's public API, used until a live key is
@@ -117,6 +117,52 @@ export function fixtureProjects(): StProject[] {
   ].map((p) => StProject.parse(p));
 }
 
+/** Quota cells, shaped like SampTrek's `GET /projects/{ref}/quotas`. Markets without cells are listed empty. */
+const FIXTURE_CELLS: Record<string, Record<string, StQuotas['markets'][number]['cells']>> = {
+  PRX10001: {
+    US: [
+      {
+        id: 'fx-q-us-f',
+        group: 'Gender',
+        name: 'Female',
+        conditions: [{ source: 'gate', questionId: 'q_gender', values: ['female'] }],
+        target: 400,
+        completes: 110,
+        isOpen: true,
+      },
+      {
+        id: 'fx-q-us-m',
+        group: 'Gender',
+        name: 'Male',
+        conditions: [{ source: 'gate', questionId: 'q_gender', values: ['male'] }],
+        target: 400,
+        completes: 104,
+        isOpen: true,
+      },
+    ],
+  },
+};
+
+const cellStores = new Map<string, typeof FIXTURE_CELLS>();
+/** The mutable quota cells behind one connection, so tests and demos can change a cell like SampTrek would. */
+export function fixtureCells(connectionId: string) {
+  let s = cellStores.get(connectionId);
+  if (!s) cellStores.set(connectionId, (s = structuredClone(FIXTURE_CELLS)));
+  return s;
+}
+
+export function fixtureQuotas(p: StProject, cells = FIXTURE_CELLS): StQuotas {
+  return StQuotas.parse({
+    projectCode: p.projectCode,
+    markets: p.markets.map((m) => ({
+      countryCode: m.countryCode,
+      targetCompletes: m.targetCompletes,
+      completes: m.completes,
+      cells: cells[p.projectCode]?.[m.countryCode] ?? [],
+    })),
+  });
+}
+
 const stores = new Map<string, StProject[]>();
 
 /** The mutable fixture copy behind one connection. */
@@ -149,5 +195,10 @@ export class FixtureSampTrek implements ProjectSource {
   async getProject(ref: string) {
     const p = fixtureStore(this.connectionId).find((x) => x.id === ref || x.projectCode === ref.toUpperCase());
     return p ? structuredClone(p) : null;
+  }
+
+  async getQuotas(ref: string) {
+    const p = await this.getProject(ref);
+    return p ? fixtureQuotas(p, fixtureCells(this.connectionId)) : null;
   }
 }

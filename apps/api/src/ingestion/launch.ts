@@ -18,9 +18,9 @@ interface M {
 
 /**
  * Launch validation (spec §4). Only markets where Supply360 has its own vendor link count: the others belong to
- * other vendors. Checks owned by later phases are listed with `pendingPhase` so people see what is still to come.
+ * other vendors. `audience` is the quota mapping and reservation checks (audience/quotas.ts audienceChecks).
  */
-export function launchChecks(p: P, markets: M[], now = new Date()): LaunchCheck[] {
+export function launchChecks(p: P, markets: M[], audience: LaunchCheck[], now = new Date()): LaunchCheck[] {
   const mine = markets.filter((m) => m.vendorLinkId);
   const missing = (pred: (m: M) => boolean) =>
     mine
@@ -54,7 +54,6 @@ export function launchChecks(p: P, markets: M[], now = new Date()): LaunchCheck[
       ok: !p.fieldEndAt || p.fieldEndAt > now,
       ...(p.fieldEndAt && p.fieldEndAt <= now ? { detail: `Ended ${p.fieldEndAt.toISOString().slice(0, 10)}` } : {}),
     },
-    { key: 'quota_map', label: 'Quotas mapped to MADP attributes', ok: false, pendingPhase: 3 },
-    { key: 'audience', label: 'Audience selected and reserved', ok: false, pendingPhase: 3 },
+    ...audience,
   ];
 }

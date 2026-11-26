@@ -23,7 +23,8 @@ import { applySourceStatus } from './lifecycle.js';
 import { contentHash, contentOf, normalize } from './normalize.js';
 import { FixtureSampTrek } from './samptrek/fixture.js';
 import { LiveSampTrek } from './samptrek/live.js';
-import { StEnvelope, StStatusChanged, type StProject } from './samptrek/types.js';
+import { StEnvelope, StStatusChanged, type StProject, type StQuotas } from './samptrek/types.js';
+import { upsertCells } from '../audience/quotas.js';
 import { verifySampTrek } from './signature.js';
 
 export type Connection = typeof sourceConnections.$inferSelect;
@@ -83,7 +84,14 @@ export class IngestionService {
    * Creates or updates one project from the source's full detail, inside the caller's transaction. Safe under
    * concurrency: the unique (tenant, source, source id) index decides who creates, and the row lock orders updates.
    */
-  async upsert(tx: Tx, conn: Connection, raw: StProject, via: Via, correlationId?: string): Promise<UpsertResult> {
+  async upsert(
+    tx: Tx,
+    conn: Connection,
+    raw: StProject,
+    via: Via,
+    correlationId?: string,
+    quotas?: StQuotas | null,
+  ): Promise<UpsertResult> {
     const n = normalize(raw, conn.vendorCode);
     const hash = contentHash(n);
     const actor = systemActor(conn.tenantId, correlationId);
@@ -125,6 +133,7 @@ export class IngestionService {
         via,
       });
       await this.upsertMarkets(tx, conn.tenantId, inserted.id, n.markets);
+      if (quotas) await upsertCells(tx, conn.tenantId, inserted.id, n.markets, quotas);
       await this.audit.write(tx, actor, {
         action: 'project.imported',
         targetType: 'project',
@@ -189,6 +198,8 @@ export class IngestionService {
       });
     }
     await this.upsertMarkets(tx, conn.tenantId, cur.id, n.markets);
+    // Quotas that could not be fetched leave the cells as they were; the next sync tries again.
+    if (quotas) await upsertCells(tx, conn.tenantId, cur.id, n.markets, quotas);
     if (to !== cur.lifecycle) {
       await this.audit.write(tx, actor, {
         action: 'project.lifecycle_changed',
@@ -285,8 +296,14 @@ export class IngestionService {
           try {
             const detail = await src.getProject(item.id);
             if (!detail) continue;
+            let quotas: StQuotas | null = null;
+            try {
+              quotas = await src.getQuotas(item.id);
+            } catch (e) {
+              r.errors.push(`${item.projectCode} quotas: ${(e as Error).message}`);
+            }
             const u = await withTenant(this.db, conn.tenantId, (tx) =>
-              this.upsert(tx, conn, detail, via, correlationId),
+              this.upsert(tx, conn, detail, via, correlationId, quotas),
             );
             if (u.created) r.created++;
             else if (u.newVersion || u.lifecycle.from !== u.lifecycle.to) r.updated++;
@@ -402,15 +419,18 @@ export class IngestionService {
         case 'project.status_changed': {
           const d = StStatusChanged.parse(env.data);
           let detail: StProject | null = null;
+          let quotas: StQuotas | null = null;
           let fetchError: string | null = null;
           try {
-            detail = await this.sourceFor(conn, 4000).getProject(d.project.id);
+            const src = this.sourceFor(conn, 4000);
+            detail = await src.getProject(d.project.id);
+            if (detail) quotas = await src.getQuotas(d.project.id).catch(() => null);
           } catch (e) {
             fetchError = (e as Error).message;
           }
           await withTenant(this.db, conn.tenantId, async (tx) => {
             if (detail) {
-              await this.upsert(tx, conn, detail, 'webhook', correlationId);
+              await this.upsert(tx, conn, detail, 'webhook', correlationId, quotas);
             } else {
               // Source unreachable or project not visible: apply the signed status itself, newest event wins.
               const [cur] = await tx
