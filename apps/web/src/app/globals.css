@@ -84,6 +84,32 @@
   color-scheme: dark;
 }
 
+[data-theme='glass'] {
+  /* Opaque values are what the frosted layers average to over the backdrop: they drive the contrast checks and
+     anything that cannot be translucent. The translucent layers themselves are below. */
+  --bg: #080b1d;
+  --surface: #141a36;
+  --surface-2: #1b2244;
+  --surface-3: #252e57;
+  --border: #39437a;
+  --text: #f1f4ff;
+  --text-muted: #aab4dc;
+  --accent: #7dd3fc;
+  --accent-strong: #38bdf8;
+  --accent-contrast: #06213a;
+  --success: #6ee7b7;
+  --warning: #fcd34d;
+  --danger: #fda4af;
+  --info: #a5b4fc;
+  --ring: #7dd3fc;
+  --glow: 0 0 0 1px rgb(255 255 255 / 0.08), 0 12px 40px -12px rgb(56 189 248 / 0.35);
+  --glass: rgb(255 255 255 / 0.055);
+  --glass-2: rgb(255 255 255 / 0.085);
+  --glass-3: rgb(255 255 255 / 0.12);
+  --glass-edge: rgb(255 255 255 / 0.12);
+  color-scheme: dark;
+}
+
 @theme inline {
   --color-bg: var(--bg);
   --color-surface: var(--surface);
@@ -134,4 +160,61 @@ body {
     linear-gradient(to right, color-mix(in oklab, var(--border) 45%, transparent) 1px, transparent 1px),
     linear-gradient(to bottom, color-mix(in oklab, var(--border) 45%, transparent) 1px, transparent 1px);
   background-size: 32px 32px;
+}
+
+/* Glassmorphism: a deep gradient backdrop with soft light blobs, and frosted, translucent surfaces over it. */
+[data-theme='glass'] body {
+  background:
+    radial-gradient(60rem 40rem at 8% -10%, rgb(99 102 241 / 0.5), transparent 60%),
+    radial-gradient(50rem 36rem at 100% 0%, rgb(56 189 248 / 0.3), transparent 60%),
+    radial-gradient(46rem 40rem at 70% 110%, rgb(217 70 239 / 0.3), transparent 60%),
+    radial-gradient(40rem 30rem at 0% 100%, rgb(20 184 166 / 0.22), transparent 60%), var(--bg);
+  background-attachment: fixed;
+}
+[data-theme='glass'] .bg-bg {
+  background-color: transparent;
+}
+[data-theme='glass'] .bg-bg\/80 {
+  background-color: rgb(8 11 29 / 0.35);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(20px) saturate(160%);
+}
+[data-theme='glass'] .bg-surface,
+[data-theme='glass'] .bg-surface-2,
+[data-theme='glass'] .bg-surface-3 {
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  backdrop-filter: blur(18px) saturate(160%);
+}
+[data-theme='glass'] .bg-surface {
+  background-color: var(--glass);
+}
+[data-theme='glass'] .bg-surface-2 {
+  background-color: var(--glass-2);
+}
+[data-theme='glass'] .bg-surface-3 {
+  background-color: var(--glass-3);
+}
+[data-theme='glass'] .border-border {
+  border-color: var(--glass-edge);
+}
+[data-theme='glass'] .rounded-xl.border {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.08),
+    0 16px 48px -24px rgb(0 0 0 / 0.6);
+}
+/* Native selects and dialogs need a solid fill to stay readable. */
+[data-theme='glass'] select option {
+  background-color: var(--surface);
+}
+[data-theme='glass'] [role='dialog'].bg-surface,
+[data-theme='glass'] [role='menu'] {
+  background-color: rgb(20 26 54 / 0.85);
+}
+@supports not (backdrop-filter: blur(1px)) {
+  [data-theme='glass'] .bg-surface {
+    background-color: var(--surface);
+  }
+  [data-theme='glass'] .bg-surface-2 {
+    background-color: var(--surface-2);
+  }
 }

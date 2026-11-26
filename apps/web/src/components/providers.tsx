@@ -6,7 +6,7 @@ import { ApiError } from '@/lib/api';
 import { isTheme, THEME_KEY, type ThemeId } from '@/lib/themes';
 
 const ThemeCtx = createContext<{ theme: ThemeId; setTheme: (t: ThemeId) => void }>({
-  theme: 'midnight',
+  theme: 'glass',
   setTheme: () => {},
 });
 export const useTheme = () => useContext(ThemeCtx);
@@ -23,7 +23,7 @@ export function Providers({ children }: { children: ReactNode }) {
         },
       }),
   );
-  const [theme, setThemeState] = useState<ThemeId>('midnight');
+  const [theme, setThemeState] = useState<ThemeId>('glass');
   useEffect(() => {
     try {
       const saved = localStorage.getItem(THEME_KEY);

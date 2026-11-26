@@ -1,5 +1,11 @@
 export const THEMES = [
   {
+    id: 'glass',
+    name: 'Glass',
+    hint: 'Frosted glass over a deep gradient',
+    swatch: ['#141a36', '#7dd3fc'],
+  },
+  {
     id: 'midnight',
     name: 'Midnight Command',
     hint: 'Navy and cyan, for control rooms',
