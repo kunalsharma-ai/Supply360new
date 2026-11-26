@@ -1,3 +1,4 @@
+import type { SourceSession } from './types.js';
 import type { ProjectSource } from '../adapter.js';
 import { StProject, StQuotas, type StListItem } from './types.js';
 
@@ -114,6 +115,32 @@ export function fixtureProjects(): StProject[] {
         },
       ],
     },
+    {
+      id: 'fx-prj-10004',
+      projectCode: 'PRX10004',
+      name: 'FIXTURE · Grocery shopper tracker Q2 (recontact wave)',
+      type: 'TRACKER',
+      category: 'Retail',
+      status: 'TEST',
+      fieldStartAt: iso(5),
+      fieldEndAt: iso(30),
+      updatedAt: iso(-5),
+      client: { name: 'FIXTURE Client A' },
+      projectManager: { name: 'FIXTURE PM' },
+      markets: [
+        {
+          countryCode: 'US',
+          language: 'en',
+          targetGroup: 'Q1 participants, main grocery shopper',
+          status: 'TEST',
+          loiMinutes: 12,
+          irPercent: 70,
+          targetCompletes: 300,
+          completes: 0,
+          vendorLinks: [link('fx-vl-6', 'ACTIVE', 300, 0)],
+        },
+      ],
+    },
   ].map((p) => StProject.parse(p));
 }
 
@@ -164,6 +191,17 @@ export function fixtureQuotas(p: StProject, cells = FIXTURE_CELLS): StQuotas {
 }
 
 const stores = new Map<string, StProject[]>();
+const sessionStores = new Map<string, Map<string, SourceSession & { projectCode: string; vendorCode: string }>>();
+
+/**
+ * FIXTURE respondent sessions behind one connection, by session id. The simulator adds one when it plays a
+ * respondent finishing a survey, and a person can play the client approving or rejecting completes.
+ */
+export function fixtureSessions(connectionId: string) {
+  let s = sessionStores.get(connectionId);
+  if (!s) sessionStores.set(connectionId, (s = new Map()));
+  return s;
+}
 
 /** The mutable fixture copy behind one connection. */
 export function fixtureStore(connectionId: string): StProject[] {
@@ -200,5 +238,14 @@ export class FixtureSampTrek implements ProjectSource {
   async getQuotas(ref: string) {
     const p = await this.getProject(ref);
     return p ? fixtureQuotas(p, fixtureCells(this.connectionId)) : null;
+  }
+
+  async getSessions(ref: string, vendorCode: string, since?: Date) {
+    const p = await this.getProject(ref);
+    if (!p) return null;
+    return [...fixtureSessions(this.connectionId).values()]
+      .filter((x) => x.projectCode === p.projectCode && x.vendorCode === vendorCode)
+      .filter((x) => !since || (x.outcomeAt && new Date(x.outcomeAt) >= since))
+      .map(({ projectCode: _p, vendorCode: _v, ...s }) => ({ ...s }));
   }
 }

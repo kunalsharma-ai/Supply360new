@@ -5,3 +5,4 @@ export * from './problem.js';
 export * from './projects.js';
 export * from './audience.js';
 export * from './execution.js';
+export * from './fieldwork.js';

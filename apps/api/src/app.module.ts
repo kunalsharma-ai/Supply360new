@@ -22,6 +22,10 @@ import { ExecutionController } from './execution/execution.controller.js';
 import { ExecutionService } from './execution/execution.service.js';
 import { RouterController } from './execution/router.controller.js';
 import { DispatchScheduler } from './execution/scheduler.js';
+import { FieldworkController } from './fieldwork/fieldwork.controller.js';
+import { FieldworkService } from './fieldwork/fieldwork.service.js';
+import { RecontactService } from './fieldwork/recontact.service.js';
+import { S2sController } from './fieldwork/s2s.controller.js';
 import { HealthController } from './health/health.controller.js';
 import { NotificationsController } from './notifications/notifications.controller.js';
 import { OpenApiController } from './openapi.js';
@@ -51,6 +55,8 @@ export class AppModule {
         SourcePoller,
         ExecutionService,
         DispatchScheduler,
+        FieldworkService,
+        RecontactService,
         { provide: APP_GUARD, useClass: ThrottlerGuard },
         { provide: APP_GUARD, useClass: SessionGuard },
         { provide: APP_FILTER, useClass: ProblemFilter },
@@ -72,6 +78,8 @@ export class AppModule {
         QuotasController,
         ExecutionController,
         RouterController,
+        FieldworkController,
+        S2sController,
       ],
     };
   }

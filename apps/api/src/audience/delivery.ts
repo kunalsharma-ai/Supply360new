@@ -10,7 +10,7 @@
  */
 export interface DeliveryRequest {
   idempotencyKey: string;
-  kind: 'invitation' | 'reminder';
+  kind: 'invitation' | 'reminder' | 'reinvite';
   madpInvitationId: string;
   /** Supply360's participation link: an opaque token, no personal data. */
   link: string;

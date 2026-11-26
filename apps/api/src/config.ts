@@ -23,6 +23,8 @@ const Env = z.object({
   SOURCE_POLL_SECONDS: z.coerce.number().int().min(0).max(86_400).default(300),
   /** Run the invitation scheduler (modes, due batches, reminders, click reports) every N seconds; 0 turns it off. */
   DISPATCH_TICK_SECONDS: z.coerce.number().int().min(0).max(3600).default(30),
+  /** The scheduler reconciles each live project against SampTrek's sessions every N minutes; 0 turns it off. */
+  RECONCILE_MINUTES: z.coerce.number().int().min(0).max(1440).default(30),
   /** Key for participation link tokens. Defaults to a key derived from SESSION_SECRET. */
   PARTICIPATION_TOKEN_SECRET: z.string().min(32).optional(),
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(24).default(12),

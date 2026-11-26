@@ -23,6 +23,10 @@ import {
   UserRolesUpdate,
   UserStatusUpdate,
   UserSummary,
+  CallbackSecret,
+  FlagReview,
+  RecontactRequest,
+  ReinviteRequest,
 } from '@s360/contracts';
 import { z } from 'zod';
 import { Public } from './common/decorators.js';
@@ -83,6 +87,15 @@ export function buildOpenApi() {
       '/webhooks/samptrek/{tenant}/{connection}': {
         post: { ...op('SampTrek event webhook, verified by X-Projexa-Signature', 'HMAC signature'), security: [] },
       },
+      '/s2s/samptrek/{tenant}/{connection}': {
+        get: {
+          ...op(
+            'SampTrek vendor S2S callback (?uid, ?status), verified by X-Projexa-Signature over the full URL',
+            'HMAC signature',
+          ),
+          security: [],
+        },
+      },
       '/projects': { get: op('Projects (?lifecycle, ?q)', 'projects.read') },
       '/projects/{id}': {
         get: op('Project with markets, launch checks, allowed actions and redirect URLs', 'projects.read'),
@@ -128,18 +141,58 @@ export function buildOpenApi() {
       '/audience/selections': { get: op('Selection snapshots, newest first', 'audience.read') },
       '/projects/{id}/execution': { get: op('Execution policy, limits, cells, batches and totals', 'projects.read') },
       '/projects/{id}/execution/policy': {
-        put: op('Set the mode and limits (automatic mode also needs execution.approve)', 'automation.manage', ExecutionPolicyUpdate),
+        put: op(
+          'Set the mode and limits (automatic mode also needs execution.approve)',
+          'automation.manage',
+          ExecutionPolicyUpdate,
+        ),
       },
-      '/projects/{id}/batches': { post: op('Create an invitation batch for a cell', 'invitations.dispatch', BatchCreate) },
+      '/projects/{id}/batches': {
+        post: op('Create an invitation batch for a cell', 'invitations.dispatch', BatchCreate),
+      },
       '/projects/{id}/batches/{bid}/decision': {
         post: op('Approve or reject (execution.approve), or cancel a batch', 'invitations.dispatch', BatchDecision),
       },
-      '/projects/{id}/batches/{bid}/send': { post: op('Send an approved batch now, if every check passes', 'invitations.dispatch') },
+      '/projects/{id}/batches/{bid}/send': {
+        post: op('Send an approved batch now, if every check passes', 'invitations.dispatch'),
+      },
       '/execution/overview': { get: op('Kill switch, projects with a policy, approval queue', 'projects.read') },
       '/execution/batches': { get: op('Invitation batches, newest first', 'projects.read') },
       '/execution/reminders': { get: op('Reminder jobs, latest first', 'projects.read') },
       '/execution/router-events': { get: op('Survey router events: clicks, prefetches, refusals', 'projects.read') },
-      '/execution/kill-switch': { put: op('Emergency stop for all sending in the tenant', 'execution.emergency_stop', KillSwitch) },
+      '/execution/kill-switch': {
+        put: op('Emergency stop for all sending in the tenant', 'execution.emergency_stop', KillSwitch),
+      },
+      '/fieldwork/live': { get: op('Every project: funnel and completes against target', 'projects.read') },
+      '/projects/{id}/fieldwork': {
+        get: op('Funnel, outcomes, incidence, LOI, markets, cells, flags, last reconciliation', 'projects.read'),
+      },
+      '/projects/{id}/participation': { get: op('Append-only participation events, newest first', 'projects.read') },
+      '/quality/flags': { get: op('Quality flags for review', 'projects.read') },
+      '/quality/flags/{id}/review': {
+        post: op('Accept or dismiss a flag, with a reason', 'quality.review', FlagReview),
+      },
+      '/projects/{id}/reconciliation': {
+        post: op("Reconcile against SampTrek's sessions API (idempotent)", 'reconciliation.manage'),
+      },
+      '/reconciliation/runs': { get: op('Reconciliation runs, newest first', 'projects.read') },
+      '/reconciliation/runs/{id}': { get: op('One run with its differences', 'projects.read') },
+      '/rewards': { get: op('Reward events and totals', 'projects.read') },
+      '/rewards/sync': { post: op('Hand pending reward events to MADP (never credits a wallet)', 'rewards.sync') },
+      '/recontact/participants': {
+        get: op('Past participants by when they took part, project, outcome and market', 'audience.read'),
+      },
+      '/projects/{id}/quotas/{cellId}/recontact': {
+        post: op('Hold past participants for a cell through MADP', 'audience.select', RecontactRequest),
+      },
+      '/projects/{id}/dropouts': { get: op('People who did not finish, by kind', 'projects.read') },
+      '/projects/{id}/reinvite': {
+        post: op('Send dropouts their link again, after every check', 'invitations.dispatch', ReinviteRequest),
+      },
+      '/sources/{id}/callback': { get: op('SampTrek S2S callback URL template for the vendor', 'integrations.read') },
+      '/sources/{id}/callback-secret': {
+        put: op("Set SampTrek's vendor callback secret", 'integrations.manage', CallbackSecret),
+      },
       '/execution/tick': { post: op('Run one scheduler pass now (not in production)', 'execution.control') },
       '/i/{tenant}/{token}': {
         get: { ...op('Participation link: records the click and 302s to the approved entry link', null), security: [] },

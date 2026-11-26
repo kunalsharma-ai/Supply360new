@@ -99,11 +99,16 @@ export function InvitationsView() {
         title="Survey Invitation Engine"
         description="Invite people Supply360 holds in MADP, in bounded batches. Every send rechecks consent, the project, quiet hours and the daily maximum first."
         actions={
-          id && (
+          <>
             <Button asChild>
-              <Link href={`/automation?project=${id}`}>Mode and limits</Link>
+              <Link href={`/invitations/recontact${id ? `?project=${id}` : ''}`}>Recontact and reinvite</Link>
             </Button>
-          )
+            {id && (
+              <Button asChild>
+                <Link href={`/automation?project=${id}`}>Mode and limits</Link>
+              </Button>
+            )}
+          </>
         }
       />
       <div className="mb-4">

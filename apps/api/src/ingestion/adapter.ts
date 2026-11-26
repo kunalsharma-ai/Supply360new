@@ -1,4 +1,4 @@
-import type { StListItem, StProject, StQuotas } from './samptrek/types.js';
+import type { SourceSession, StListItem, StProject, StQuotas } from './samptrek/types.js';
 
 /**
  * A project source. SampTrek implements it in FIXTURE and LIVE mode; SampCloud will implement the same interface
@@ -14,6 +14,11 @@ export interface ProjectSource {
   getProject(ref: string): Promise<StProject | null>;
   /** Quota cells per market; null when the project is not visible. */
   getQuotas(ref: string): Promise<StQuotas | null>;
+  /**
+   * Respondent sessions of Supply360's own vendor link only (other vendors' sessions are dropped on arrival), with
+   * final client approval. Null when the project is not visible.
+   */
+  getSessions(ref: string, vendorCode: string, since?: Date): Promise<SourceSession[] | null>;
 }
 
 export class SourceError extends Error {

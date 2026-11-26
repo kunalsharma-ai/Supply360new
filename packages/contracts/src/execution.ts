@@ -37,6 +37,8 @@ export const ExecutionPolicyUpdate = z
     linkValidDays: z.number().int().min(1).max(60),
     /** Automatic mode escalates to a person when more than this percentage of a batch is refused. */
     escalateRefusalPercent: z.number().int().min(1).max(100),
+    /** Flag a complete for review when its LOI is under this percentage of the expected LOI. Omit for no flag. */
+    speederPercent: z.number().int().min(1).max(100).nullable().optional(),
     reason: z.string().trim().min(3).max(500),
   })
   .refine((p) => p.reminderOffsetsHours.every((h, i, a) => i === 0 || h > a[i - 1]!), {

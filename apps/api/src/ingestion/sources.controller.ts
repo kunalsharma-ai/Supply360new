@@ -47,6 +47,8 @@ export class SourcesController {
       enabled: c.enabled,
       webhookUrl: `${base}${webhookPath(tenantSlug, c.id)}`,
       webhookEvents: ['project.status_changed'],
+      callbackUrlTemplate: `${base}/api/v1/s2s/samptrek/${tenantSlug}/${c.id}?uid={uid}&status={status}`,
+      hasCallbackSecret: !!c.callbackSecretSealed || c.mode === 'fixture',
       pollCheckpoint: c.pollCheckpoint?.toISOString() ?? null,
       lastSyncAt: c.lastSyncAt?.toISOString() ?? null,
       lastSyncResult: c.lastSyncResult,

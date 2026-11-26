@@ -57,6 +57,20 @@
       "when": 1795663175066,
       "tag": "0007_execution_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1795674041895,
+      "tag": "0008_fieldwork",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1795674042459,
+      "tag": "0009_fieldwork_rls",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,5 @@
 import { SourceError, type ProjectSource } from '../adapter.js';
-import { StListItem, StPage, StProject, StQuotas } from './types.js';
+import { StListItem, StPage, StProject, StQuotas, StSession, toSourceSession, type SourceSession } from './types.js';
 
 const TIMEOUT_MS = 10_000;
 
@@ -66,5 +66,23 @@ export class LiveSampTrek implements ProjectSource {
     const parsed = StQuotas.safeParse(body);
     if (!parsed.success) throw new SourceError('SampTrek quotas have an unexpected shape', false);
     return parsed.data;
+  }
+
+  async getSessions(ref: string, vendorCode: string, since?: Date): Promise<SourceSession[] | null> {
+    const out: SourceSession[] = [];
+    let cursor: string | null = null;
+    for (let page = 0; page < 500; page++) {
+      const p = new URLSearchParams({ limit: '200' });
+      if (since) p.set('outcomeSince', since.toISOString());
+      if (cursor) p.set('cursor', cursor);
+      const body = await this.get(`/projects/${encodeURIComponent(ref)}/sessions?${p}`);
+      if (body === null) return null;
+      const parsed = StPage(StSession).safeParse(body);
+      if (!parsed.success) throw new SourceError('SampTrek sessions have an unexpected shape', false);
+      for (const s of parsed.data.data) if (s.vendor?.code === vendorCode) out.push(toSourceSession(s));
+      cursor = parsed.data.nextCursor;
+      if (!cursor) return out;
+    }
+    throw new SourceError('SampTrek sessions did not finish paging', true);
   }
 }

@@ -154,7 +154,12 @@ describe('FIXTURE adapter', () => {
     expect(p1.data).toHaveLength(2);
     const p2 = await a.listProjects({ cursor: p1.nextCursor });
     expect(p2.nextCursor).toBeNull();
-    expect([...p1.data, ...p2.data].map((p) => p.projectCode).sort()).toEqual(['PRX10001', 'PRX10002', 'PRX10003']);
+    expect([...p1.data, ...p2.data].map((p) => p.projectCode).sort()).toEqual([
+      'PRX10001',
+      'PRX10002',
+      'PRX10003',
+      'PRX10004',
+    ]);
   });
 });
 

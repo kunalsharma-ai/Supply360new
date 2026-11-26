@@ -8,6 +8,7 @@ import { problem } from '../common/problem.js';
 import { ZodPipe } from '../common/zod.pipe.js';
 import { ENV, type Env } from '../config.js';
 import { DB } from '../db/db.module.js';
+import { FieldworkService } from '../fieldwork/fieldwork.service.js';
 import { batchView, ExecutionService, policyView } from './execution.service.js';
 
 @Controller()
@@ -16,6 +17,7 @@ export class ExecutionController {
     @Inject(DB) private readonly db: Db,
     @Inject(ENV) private readonly env: Env,
     private readonly exec: ExecutionService,
+    private readonly fieldwork: FieldworkService,
   ) {}
 
   /** Policy, today's count against the daily maximum, cells with people left to invite, batches and totals. */
@@ -106,6 +108,6 @@ export class ExecutionController {
   async tick(@Ctx() ctx: RequestContext) {
     if (this.env.NODE_ENV === 'production') throw problem.notFound();
     const [t] = await this.db.select({ id: tenants.id }).from(tenants).where(eq(tenants.id, ctx.tenantId));
-    return this.exec.tick(t!.id);
+    return { ...(await this.exec.tick(t!.id)), ...(await this.fieldwork.tick(t!.id)) };
   }
 }
