@@ -151,6 +151,8 @@ export const sourceConnections = pgTable(
     apiKeySealed: text('api_key_sealed'),
     /** Sealed webhook signing secret (`whsec_…`), shown once at creation. */
     webhookSecretSealed: text('webhook_secret_sealed').notNull(),
+    /** Sealed secret SampTrek signs Supply360's vendor S2S callbacks with (SampTrek's vendor callbackSecret). */
+    callbackSecretSealed: text('callback_secret_sealed'),
     vendorCode: text('vendor_code').notNull(),
     enabled: boolean('enabled').notNull().default(true),
     /** `updatedSince` for the next poll; null means the next sync is a full backfill. */
@@ -427,6 +429,8 @@ export const reservations = pgTable(
       .references(() => audienceConnections.id, { onDelete: 'restrict' }),
     /** MADP's reservation id. */
     externalId: text('external_id').notNull(),
+    /** match (new people from MADP criteria) | recontact (people who took part before) */
+    origin: text('origin').notNull().default('match'),
     /** active → released | expired */
     status: text('status').notNull().default('active'),
     requested: integer('requested').notNull(),
@@ -487,6 +491,8 @@ export const executionPolicies = pgTable('execution_policies', {
   reminderOffsetsHours: jsonb('reminder_offsets_hours').notNull(),
   allowedPanels: jsonb('allowed_panels').notNull(),
   linkValidDays: integer('link_valid_days').notNull(),
+  /** Flag a complete for review when its LOI is under this share of the expected LOI. Null: no speeder flag. */
+  speederPercent: integer('speeder_percent'),
   /** Automatic mode stops proposing and asks a person when more than this share of a batch is refused. */
   escalateRefusalPercent: integer('escalate_refusal_percent').notNull(),
   /** Set when automatic mode escalated; it sends nothing new until a person saves the policy again. */
@@ -568,13 +574,35 @@ export const invitations = pgTable(
     clickedAt: timestamp('clicked_at', { withTimezone: true }),
     /** Outbox: when MADP acknowledged the click event. Null with a click means it is still to be reported. */
     clickReportedAt: timestamp('click_reported_at', { withTimezone: true }),
+    // Phase 5: derived from participation events, never set directly.
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    /** complete | terminate | quota_full | quality_fail | duplicate | security_reject | partial | technical_error */
+    outcome: text('outcome'),
+    outcomeAt: timestamp('outcome_at', { withTimezone: true }),
+    outcomeSource: text('outcome_source'),
+    /** SampTrek's session id. */
+    sessionRef: text('session_ref'),
+    loiSeconds: integer('loi_seconds'),
+    /** Final client decision from SampTrek: approved | rejected; null while pending. */
+    approval: text('approval'),
+    approvalAt: timestamp('approval_at', { withTimezone: true }),
+    /** Outbox: when MADP acknowledged the current outcome. */
+    outcomeReportedAt: timestamp('outcome_reported_at', { withTimezone: true }),
+    /** Times a person invited this dropout again to finish the same survey (capped). */
+    reinviteCount: integer('reinvite_count').notNull().default(0),
+    lastReinvitedAt: timestamp('last_reinvited_at', { withTimezone: true }),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     createdAt: createdAt(),
   },
   (t) => [
-    index('invitations_click_outbox').on(t.tenantId, t.clickedAt).where(sql`click_reported_at is null and clicked_at is not null`),
+    index('invitations_click_outbox')
+      .on(t.tenantId, t.clickedAt)
+      .where(sql`click_reported_at is null and clicked_at is not null`),
     uniqueIndex('invitations_project_ref').on(t.projectId, t.ref),
     index('invitations_batch').on(t.batchId),
+    /** Recontact searches past participants by when they took part, and reinvites list a project's dropouts. */
+    index('invitations_participated').on(t.tenantId, t.outcomeAt.desc()),
+    index('invitations_project_outcome').on(t.projectId, t.outcome),
   ],
 );
 
@@ -634,4 +662,115 @@ export const routerEvents = pgTable(
     at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('router_events_recent').on(t.tenantId, t.at.desc())],
+);
+
+// ───────────────────────────── Phase 5: participation, quality, reconciliation, rewards ─────────────────────────────
+
+/**
+ * Append-only participation events from verified sources: SampTrek's signed S2S callbacks, its sessions API
+ * (reconciliation) and Supply360's own router. One row per dedupe key, so a retry or replay is never counted twice.
+ */
+export const participationEvents = pgTable(
+  'participation_events',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    invitationId: uuid('invitation_id')
+      .notNull()
+      .references(() => invitations.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    /** samptrek_callback | samptrek_sessions | router */
+    source: text('source').notNull(),
+    verified: boolean('verified').notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
+    receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
+    dedupeKey: text('dedupe_key').notNull(),
+    sessionRef: text('session_ref'),
+    /** What the derivation did with it: applied | ignored (and why) | conflict. */
+    effect: text('effect').notNull(),
+    detail: jsonb('detail'),
+  },
+  (t) => [
+    uniqueIndex('participation_events_key').on(t.tenantId, t.dedupeKey),
+    index('participation_events_project').on(t.tenantId, t.projectId, t.receivedAt.desc()),
+    index('participation_events_invitation').on(t.invitationId, t.occurredAt),
+  ],
+);
+
+/** Reviewable quality flags. A flag never rejects anyone by itself: a person accepts or dismisses it. */
+export const qualityFlags = pgTable(
+  'quality_flags',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    invitationId: uuid('invitation_id')
+      .notNull()
+      .references(() => invitations.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    detail: jsonb('detail').notNull(),
+    /** open | accepted | dismissed */
+    status: text('status').notNull().default('open'),
+    reviewedBy: uuid('reviewed_by'),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    reviewReason: text('review_reason'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('quality_flags_once').on(t.invitationId, t.kind),
+    index('quality_flags_open').on(t.tenantId, t.status, t.createdAt.desc()),
+  ],
+);
+
+/** One reconciliation of a project against SampTrek's sessions: counts and the differences found. */
+export const reconciliationRuns = pgTable(
+  'reconciliation_runs',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    status: text('status').notNull(),
+    summary: jsonb('summary').notNull(),
+    differences: jsonb('differences').notNull(),
+    startedBy: uuid('started_by'),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+  },
+  (t) => [index('reconciliation_runs_project').on(t.tenantId, t.projectId, t.startedAt.desc())],
+);
+
+/**
+ * Reward events: one per client-approved complete, handed to MADP with an idempotency key. Supply360 never credits
+ * a wallet; the panel's own ledger does, after MADP acknowledges.
+ */
+export const rewardEvents = pgTable(
+  'reward_events',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    invitationId: uuid('invitation_id')
+      .notNull()
+      .references(() => invitations.id, { onDelete: 'cascade' }),
+    idempotencyKey: text('idempotency_key').notNull(),
+    /** pending | acknowledged | unavailable */
+    status: text('status').notNull().default('pending'),
+    detail: text('detail'),
+    attempts: integer('attempts').notNull().default(0),
+    createdAt: createdAt(),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('reward_events_invitation').on(t.invitationId),
+    index('reward_events_status').on(t.tenantId, t.status),
+  ],
 );

@@ -3,6 +3,7 @@ import { parseArgs } from 'node:util';
 import { Secret, TOTP } from 'otpauth';
 import pg from 'pg';
 import { TokenSigner } from '../execution/token.js';
+import { signCallback } from '../fieldwork/outcomes.js';
 import { signSampTrek } from '../ingestion/signature.js';
 import { provisionTenant } from './provision.js';
 
@@ -382,6 +383,41 @@ OPS.splice(0, OPS.length, {
 });
 const clicks: Awaited<ReturnType<typeof level>>[] = [];
 for (const c of LEVELS) clicks.push(await level(c, cookies));
+
+// Phase 5: SampTrek's signed S2S callbacks for those invitations (a mix of outcomes, so duplicates and conflicts
+// happen as they would in the field), alongside people reading live fieldwork.
+const cbSecret = `loadtest-callback-${randomBytes(12).toString('hex')}`;
+const setSecret = await post(`/sources/${connBody.id}/callback-secret`, { secret: cbSecret }, 'PUT');
+if (!setSecret.ok) throw new Error(`callback secret ${setSecret.status}`);
+const { callbackUrlTemplate } = (await (
+  await fetch(`${BASE}/sources/${connBody.id}/callback`, { headers: { cookie: adminCookie } })
+).json()) as { callbackUrlTemplate: string };
+const tokens = ids.map((r) => signer.sign(r.id));
+const STATUSES = ['complete', 'complete', 'terminate', 'quota_full', 'partial'];
+let cbSeq = 0;
+OPS.splice(
+  0,
+  OPS.length,
+  {
+    name: 'GET /s2s/samptrek (signed callback)',
+    weight: 80,
+    run: async () => {
+      const url = callbackUrlTemplate.replace('{uid}', any(tokens)).replace('{status}', any(STATUSES));
+      const h = signCallback(cbSecret, url);
+      const u = new URL(url);
+      return fetch(`${BASE}${u.pathname.replace(/^\/api\/v1/, '')}${u.search}`, {
+        headers: { ...h, 'x-idempotency-key': `cb:load-${process.pid}-${cbSeq++}:vendor` },
+      });
+    },
+  },
+  {
+    name: 'GET /projects/:id/fieldwork',
+    weight: 20,
+    run: (c) => fetch(`${BASE}/projects/${pid}/fieldwork`, { headers: { cookie: c } }),
+  },
+);
+const callbacks: Awaited<ReturnType<typeof level>>[] = [];
+for (const c of LEVELS) callbacks.push(await level(c, cookies));
 const report = {
   at: new Date().toISOString(),
   base: values.base,
@@ -397,6 +433,7 @@ const report = {
   mix: MIX,
   results,
   clickPath: { invitations: invited, batches: batchMs.map((x) => Math.round(x)), results: clicks },
+  s2sPath: { mix: OPS.map((o) => `${o.weight}% ${o.name}`), results: callbacks },
 };
 if (values.json) console.log(JSON.stringify(report, null, 2));
 else {
@@ -419,4 +456,7 @@ else {
   );
   console.log('conc  req/s  requests  errors   p50 ms  p95 ms  p99 ms  statuses');
   table(clicks);
+  console.log(`\nS2S callbacks (${report.s2sPath.mix.join(', ')}):`);
+  console.log('conc  req/s  requests  errors   p50 ms  p95 ms  p99 ms  statuses');
+  table(callbacks);
 }

@@ -2,7 +2,16 @@ import type { AudienceCriteria } from '@s360/contracts';
 import type { z } from 'zod';
 import { madpHeaders } from './signing.js';
 import { AudienceError, type AudienceSource } from './source.js';
-import { MdAttributes, MdAuthorize, MdConsent, MdCounts, MdMatch, MdParticipation, MdReleased, MdReservation } from './types.js';
+import {
+  MdAttributes,
+  MdAuthorize,
+  MdConsent,
+  MdCounts,
+  MdMatch,
+  MdParticipation,
+  MdReleased,
+  MdReservation,
+} from './types.js';
 
 const PREFIX = '/api/v1/supply360';
 const TIMEOUT_MS = 10_000;

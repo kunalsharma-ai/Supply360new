@@ -24,7 +24,10 @@ const COPY: Record<string, { title: string; body: string }> = {
     title: 'This survey has closed',
     body: 'It is no longer taking part. Thank you for wanting to help; we will invite you to another one.',
   },
-  'link-expired': { title: 'This link has expired', body: 'Invitations work for a limited time. Watch for your next one.' },
+  'link-expired': {
+    title: 'This link has expired',
+    body: 'Invitations work for a limited time. Watch for your next one.',
+  },
   invalid: { title: 'This link does not work', body: 'Please open the link exactly as it arrived in your invitation.' },
   'link-check': {
     title: 'Link checked',

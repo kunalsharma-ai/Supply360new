@@ -130,8 +130,8 @@ await page.goto(`${BASE}/security`);
 await page.getByText('Controls').first().waitFor();
 await axe('security');
 await shot('07-security');
-await page.goto(`${BASE}/participation`);
-await page.getByText('Arrives in Phase 5').waitFor();
+await page.goto(`${BASE}/copilot`);
+await page.getByText('Arrives in Phase 7').waitFor();
 check('a module not built yet shows its phase, not a mock', true);
 await shot('08-planned-module');
 
@@ -146,7 +146,7 @@ check(
 await axe('projects');
 await shot('11-projects');
 
-await page.getByRole('link', { name: /Grocery shopper tracker/ }).click();
+await page.getByRole('link', { name: /Grocery shopper tracker Q1/ }).click();
 await page.getByRole('heading', { name: 'Launch checks' }).waitFor();
 check(
   'Mark ready is blocked until entry links are approved',
@@ -228,6 +228,7 @@ await page.getByRole('link', { name: 'Allocation and caps' }).click();
 await page.getByRole('button', { name: 'Save allocation' }).click();
 await page.getByText('Allocation saved').waitFor();
 // Stacked toasts fade out behind the newest one; let them go before checking contrast.
+await page.mouse.move(5, 5); // a hovered toast never times out
 await page.locator('[data-sonner-toast]').first().waitFor({ state: 'detached', timeout: 15000 });
 await axe('allocation');
 await shot('19-allocation');
@@ -281,12 +282,14 @@ for (const [sel, v] of [
   ['#p-tz', 'UTC'],
   ['#p-link', '7'],
   ['#p-rem', '24, 72'],
+  ['#p-speed', '40'],
   ['#p-reason', 'E2E policy'],
 ])
   await page.fill(sel, v);
 await page.getByRole('checkbox', { name: 'Turn2Opinion' }).check();
 await page.getByRole('button', { name: 'Save policy' }).click();
 await page.getByText('Policy saved as version 1').waitFor();
+await page.mouse.move(5, 5); // a hovered toast never times out
 await page.locator('[data-sonner-toast]').first().waitFor({ state: 'detached', timeout: 15000 });
 await axe('workflow automation');
 await shot('23-automation');
@@ -298,7 +301,11 @@ await page.fill('#b-reason', 'E2E first batch');
 await page.getByRole('button', { name: 'Send', exact: true }).click();
 await page.getByText(/^Sent \d+ invitations/).waitFor();
 await page.getByRole('cell', { name: 'sent', exact: true }).first().waitFor();
-check('a manual batch is sent after its checks', (await page.getByRole('cell', { name: 'sent', exact: true }).count()) > 0);
+check(
+  'a manual batch is sent after its checks',
+  (await page.getByRole('cell', { name: 'sent', exact: true }).count()) > 0,
+);
+await page.mouse.move(5, 5); // a hovered toast never times out
 await page.locator('[data-sonner-toast]').first().waitFor({ state: 'detached', timeout: 15000 });
 await axe('invitation engine');
 await shot('24-invitations');
@@ -317,7 +324,10 @@ await shot('25-router');
 
 await page.goto(`${BASE}/reminders`);
 await page.getByRole('cell', { name: 'pending', exact: true }).first().waitFor();
-check('reminders are planned for the invited who have not clicked', (await page.getByRole('cell', { name: 'pending', exact: true }).count()) > 0);
+check(
+  'reminders are planned for the invited who have not clicked',
+  (await page.getByRole('cell', { name: 'pending', exact: true }).count()) > 0,
+);
 await axe('reminder engine');
 await shot('26-reminders');
 
@@ -333,12 +343,110 @@ await page.fill('#stop-reason', 'E2E drill');
 await page.getByRole('button', { name: 'Stop all sending' }).click();
 await page.getByText('Emergency stop is on for every project').waitFor();
 check('the emergency stop shows on every screen that sends', true);
+await page.mouse.move(5, 5); // a hovered toast never times out
 await page.locator('[data-sonner-toast]').first().waitFor({ state: 'detached', timeout: 15000 });
 await shot('28-kill-switch');
 await page.getByRole('button', { name: 'Lift emergency stop' }).click();
 await page.fill('#stop-reason', 'E2E drill over');
 await page.getByRole('button', { name: 'Lift the stop' }).click();
 await page.getByText('Sending resumed').waitFor();
+
+// 7e. Phase 5: outcomes from SampTrek's signed S2S callbacks, live fieldwork, IR, LOI, quality, reconciliation,
+// rewards, recontact and reinvite
+await page.goto(`${BASE}/participation?project=${pid}`);
+await page.getByText('Play a respondent').waitFor();
+for (const [status, loi] of [
+  ['complete', '12'],
+  ['complete', '2'],
+  ['terminate', '4'],
+]) {
+  await page.selectOption('#sim-status', status);
+  await page.fill('#sim-loi', loi);
+  await page.getByRole('button', { name: 'Send callback' }).click();
+  await page
+    .getByText(/^SampTrek callback recorded/)
+    .first()
+    .waitFor();
+  await page.mouse.move(5, 5); // a hovered toast never times out
+  await page.locator('[data-sonner-toast]').first().waitFor({ state: 'detached', timeout: 15000 });
+}
+await page.getByRole('cell', { name: 'SampTrek S2S' }).first().waitFor();
+check(
+  'signed S2S callbacks appear as participation events',
+  (await page.getByRole('cell', { name: 'SampTrek S2S' }).count()) >= 3,
+);
+await axe('participation tracker');
+await shot('29-participation');
+
+await page.goto(`${BASE}/reconciliation?project=${pid}`);
+await page.getByRole('button', { name: 'Reconcile now' }).click();
+await page.getByText(/^Reconciled \d+ sessions/).waitFor();
+await page.getByText('Sessions at SampTrek').waitFor();
+await page.getByRole('button', { name: /Play client: approve 5/ }).click();
+await page.getByText(/^Client decided \d+ completes/).waitFor();
+check('reconciliation pulls SampTrek sessions and the client decision', true);
+await page.mouse.move(5, 5); // a hovered toast never times out
+await page.locator('[data-sonner-toast]').first().waitFor({ state: 'detached', timeout: 15000 });
+await axe('reconciliation');
+await shot('30-reconciliation');
+
+await page.goto(`${BASE}/live?project=${pid}`);
+await page.getByRole('heading', { name: 'Markets' }).waitFor();
+check(
+  'live fieldwork shows the funnel and incidence',
+  await page.getByText('Completes ÷ (completes + terminates)').isVisible(),
+);
+await axe('live fieldwork');
+await shot('31-live');
+await page.goto(`${BASE}/ir?project=${pid}`);
+await page.getByRole('heading', { name: 'By market' }).waitFor();
+await axe('IR intelligence');
+await shot('32-ir');
+await page.goto(`${BASE}/loi?project=${pid}`);
+await page.getByRole('heading', { name: 'Distribution' }).waitFor();
+await axe('LOI intelligence');
+await shot('33-loi');
+
+await page.goto(`${BASE}/quality`);
+await page.getByText('Faster than the policy allows').first().waitFor();
+check(
+  'a speeder is flagged for a person to review, not rejected',
+  (await page.getByRole('button', { name: 'Dismiss' }).count()) >= 1,
+);
+await axe('quality intelligence');
+await shot('34-quality');
+
+await page.goto(`${BASE}/rewards`);
+await page.getByText('Acknowledged by MADP').waitFor();
+check(
+  'approved completes become reward events, never wallet credits',
+  (await page.getByRole('cell', { name: /^s360-reward-/ }).count()) >= 1,
+);
+await axe('rewards');
+await shot('35-rewards');
+
+await page.goto(`${BASE}/invitations/recontact?project=${pid}`);
+await page.getByRole('tab', { name: 'Recontact past participants' }).waitFor();
+await page.selectOption('#rc-range', 'year');
+await page.getByRole('heading', { name: 'Participants' }).waitFor();
+await page.locator('tbody tr').first().waitFor();
+check('past participants can be found by when they took part', (await page.locator('tbody tr').count()) >= 1);
+await axe('recontact');
+await shot('36-recontact');
+await page.getByRole('tab', { name: 'Reinvite dropouts' }).click();
+await page.getByRole('heading', { name: 'Dropouts' }).waitFor();
+await page.getByLabel('Invited, never opened the link').check();
+await page.locator('tbody input[type=checkbox]:not([disabled])').first().check();
+await page.locator('tbody input[type=checkbox]:not([disabled])').nth(1).check();
+await page.getByRole('button', { name: /^Reinvite 2$/ }).click();
+await page.fill('#ri-reason', 'E2E reinvite');
+await page.getByRole('button', { name: 'Reinvite', exact: true }).click();
+await page.getByText(/^Reinvited 2/).waitFor();
+check('picked dropouts are reinvited after the checks', true);
+await page.mouse.move(5, 5); // a hovered toast never times out
+await page.locator('[data-sonner-toast]').first().waitFor({ state: 'detached', timeout: 15000 });
+await axe('reinvite');
+await shot('37-reinvite');
 
 await page.goto(`${BASE}/integrations/samptrek`);
 await page.getByText('Webhook URL for SampTrek').waitFor();
@@ -349,7 +457,7 @@ await page.selectOption('#sim-status', 'HOLD');
 await page.getByRole('button', { name: 'Send signed webhook' }).click();
 await page.getByText('Signed webhook delivered').waitFor();
 await page.goto(`${BASE}/projects`);
-await page.getByRole('link', { name: /Grocery shopper tracker/ }).click();
+await page.getByRole('link', { name: /Grocery shopper tracker Q1/ }).click();
 await page.getByText('Dispatch stopped').waitFor();
 check(
   'a signed HOLD from SampTrek stops dispatch',

@@ -41,6 +41,7 @@ const EMPTY = {
   allowedPanels: [] as string[],
   linkValidDays: '',
   escalateRefusalPercent: '',
+  speederPercent: '',
   reason: '',
 };
 type Draft = typeof EMPTY;
@@ -57,6 +58,7 @@ const fromPolicy = (p: Policy): Draft => ({
   allowedPanels: p.allowedPanels,
   linkValidDays: String(p.linkValidDays),
   escalateRefusalPercent: String(p.escalateRefusalPercent),
+  speederPercent: p.speederPercent == null ? '' : String(p.speederPercent),
   reason: '',
 });
 
@@ -76,6 +78,7 @@ const toBody = (d: Draft): Form => ({
   allowedPanels: d.allowedPanels as PanelCode[],
   linkValidDays: Number(d.linkValidDays),
   escalateRefusalPercent: Number(d.escalateRefusalPercent),
+  speederPercent: d.speederPercent.trim() ? Number(d.speederPercent) : null,
   reason: d.reason,
 });
 
@@ -258,6 +261,18 @@ export function AutomationView() {
                     min={1}
                     max={60}
                   />
+                  <div>
+                    <Label htmlFor="p-speed">Flag completes faster than (% of expected LOI, empty for off)</Label>
+                    <Input
+                      id="p-speed"
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={draft.speederPercent}
+                      onChange={set('speederPercent')}
+                      placeholder="Off"
+                    />
+                  </div>
                   <div className="sm:col-span-2">
                     <Label htmlFor="p-rem">
                       Reminders, hours after the invitation (comma separated, empty for none)

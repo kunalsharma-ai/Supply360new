@@ -12,6 +12,7 @@ export interface Policy {
   allowedPanels: string[];
   linkValidDays: number;
   escalateRefusalPercent: number;
+  speederPercent: number | null;
   escalatedAt: string | null;
   escalationReason: string | null;
   version: number;

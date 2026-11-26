@@ -115,6 +115,153 @@ export class AudienceService {
   }
 
   /**
+   * Locks the project and checks a cell can take a reservation: open, mapped, capped and not mixing panels.
+   * Returns what a reservation needs, including how many more people the cell may hold.
+   */
+  async prepareHold(tx: Tx, projectId: string, cellId: string, now: Date) {
+    const [p] = await tx.select().from(projects).where(eq(projects.id, projectId)).for('update');
+    if (!p) throw problem.notFound('No such project');
+    if (CLOSED.includes(p.lifecycle))
+      throw problem.conflict(
+        'project_stopped',
+        `The project is ${p.lifecycle.replace('_', ' ')}; nothing can be reserved`,
+      );
+    const [cell] = await tx
+      .select()
+      .from(quotaCells)
+      .where(and(eq(quotaCells.id, cellId), eq(quotaCells.projectId, projectId)));
+    if (!cell) throw problem.notFound('No such quota cell');
+    if (cell.removed || !cell.isOpen) throw problem.conflict('cell_closed', 'This cell is closed at SampTrek');
+    if (!cell.criteria) throw problem.conflict('cell_unmapped', 'Map this cell to MADP criteria first');
+    if (!cell.inviteCap) throw problem.conflict('no_cap', 'Set a cap for this cell in Allocation first');
+    const conn = await this.activeOrThrow(tx);
+
+    await this.expire(tx, projectId, now);
+    const criteria = criteriaFor(cell);
+    const panel = criteria.panels![0]!;
+    const [other] = await tx
+      .select({ panel: reservedRefs.panel })
+      .from(reservedRefs)
+      .where(and(eq(reservedRefs.projectId, projectId), ne(reservedRefs.panel, panel)))
+      .limit(1);
+    if (other)
+      throw problem.conflict(
+        'panel_mixing',
+        `This project already holds ${other.panel} people. MADP gives one reference per panel membership, so mixing panels could invite one person twice.`,
+      );
+    const [{ n: held } = { n: 0 }] = await tx
+      .select({ n: count() })
+      .from(reservedRefs)
+      .where(eq(reservedRefs.cellId, cellId));
+    const room = cell.inviteCap - held;
+    if (room <= 0)
+      throw problem.conflict('cap_reached', `This cell already holds ${held} of its cap of ${cell.inviteCap}`);
+    const mine = new Set(
+      (await tx.select({ ref: reservedRefs.ref }).from(reservedRefs).where(eq(reservedRefs.projectId, projectId))).map(
+        (r) => r.ref,
+      ),
+    );
+    return { p, cell, conn, criteria, panel, held, room, mine };
+  }
+
+  /**
+   * Asks MADP to hold the picked references and records the hold. MADP re-checks each one (unknown, held for
+   * another project, and so on) and refuses those it will not hold.
+   */
+  async hold(
+    tx: Tx,
+    ctx: RequestContext,
+    h: Awaited<ReturnType<AudienceService['prepareHold']>>,
+    picked: { ref: string; panel: string }[],
+    o: {
+      requested: number;
+      expiresInDays: number;
+      origin: 'match' | 'recontact';
+      criteria: unknown;
+      dataMode: string;
+      eligible: number | null;
+      returned: number;
+      excluded: unknown;
+    },
+    now: Date,
+  ) {
+    const { p, cell, conn } = h;
+    const src = this.sourceFor(conn);
+    const selectionId = randomUUID();
+    const expiresAt = new Date(now.getTime() + o.expiresInDays * DAY);
+    const r = await this.call(() =>
+      src.reserve(
+        { projectRef: projectRef(p.id), refs: picked.map((x) => x.ref), expiresAt: expiresAt.toISOString() },
+        `s360-${selectionId}`,
+      ),
+    );
+    const refused = new Set(r.refused.map((x) => x.ref));
+    const keep = picked.filter((x) => !refused.has(x.ref));
+    await tx.insert(audienceSelections).values({
+      id: selectionId,
+      tenantId: ctx.tenantId,
+      projectId: p.id,
+      cellId: cell.id,
+      connectionId: conn.id,
+      dataMode: o.dataMode,
+      criteria: o.criteria,
+      eligible: o.eligible,
+      returned: o.returned,
+      excluded: o.excluded,
+      refs: picked.map((x) => x.ref),
+      createdBy: ctx.userId,
+    });
+    const [res] = await tx
+      .insert(reservations)
+      .values({
+        tenantId: ctx.tenantId,
+        projectId: p.id,
+        cellId: cell.id,
+        selectionId,
+        connectionId: conn.id,
+        externalId: r.reservationId,
+        origin: o.origin,
+        requested: o.requested,
+        held: keep.length,
+        refused: r.refused,
+        expiresAt: new Date(r.expiresAt),
+        createdBy: ctx.userId,
+      })
+      .returning();
+    if (keep.length)
+      await tx
+        .insert(reservedRefs)
+        .values(
+          keep.map((x) => ({
+            tenantId: ctx.tenantId,
+            projectId: p.id,
+            cellId: cell.id,
+            reservationId: res!.id,
+            ref: x.ref,
+            panel: x.panel,
+            expiresAt: new Date(r.expiresAt),
+          })),
+        )
+        .onConflictDoNothing();
+    await this.audit.write(tx, actorOf(ctx), {
+      action: o.origin === 'recontact' ? 'audience.recontact_reserved' : 'audience.reserved',
+      targetType: 'quota_cell',
+      targetId: cell.id,
+      details: {
+        projectId: p.id,
+        reservationId: res!.id,
+        madpReservationId: r.reservationId,
+        requested: o.requested,
+        held: keep.length,
+        refused: r.refused.length,
+        eligible: o.eligible,
+        dataMode: o.dataMode,
+      },
+    });
+    return { reservationId: res!.id, selectionId, held: keep.length, refused: r.refused, expiresAt: r.expiresAt };
+  }
+
+  /**
    * Selects and reserves people for one cell. The project row lock serialises every reservation of a project,
    * so concurrent requests can never hold more than the cell's cap, and the unique (project, ref) index means one
    * MADP reference is never held twice for a project.
@@ -122,57 +269,16 @@ export class AudienceService {
   async reserve(ctx: RequestContext, projectId: string, cellId: string, body: ReserveRequest) {
     return withTenant(this.db, ctx.tenantId, async (tx) => {
       const now = new Date();
-      const [p] = await tx.select().from(projects).where(eq(projects.id, projectId)).for('update');
-      if (!p) throw problem.notFound('No such project');
-      if (CLOSED.includes(p.lifecycle))
-        throw problem.conflict(
-          'project_stopped',
-          `The project is ${p.lifecycle.replace('_', ' ')}; nothing can be reserved`,
-        );
-      const [cell] = await tx
-        .select()
-        .from(quotaCells)
-        .where(and(eq(quotaCells.id, cellId), eq(quotaCells.projectId, projectId)));
-      if (!cell) throw problem.notFound('No such quota cell');
-      if (cell.removed || !cell.isOpen) throw problem.conflict('cell_closed', 'This cell is closed at SampTrek');
-      if (!cell.criteria) throw problem.conflict('cell_unmapped', 'Map this cell to MADP criteria first');
-      if (!cell.inviteCap) throw problem.conflict('no_cap', 'Set a cap for this cell in Allocation first');
-      const conn = await this.activeOrThrow(tx);
-
-      await this.expire(tx, projectId, now);
-      const criteria = criteriaFor(cell);
-      const panel = criteria.panels![0]!;
-      const [other] = await tx
-        .select({ panel: reservedRefs.panel })
-        .from(reservedRefs)
-        .where(and(eq(reservedRefs.projectId, projectId), ne(reservedRefs.panel, panel)))
-        .limit(1);
-      if (other)
-        throw problem.conflict(
-          'panel_mixing',
-          `This project already holds ${other.panel} people. MADP gives one reference per panel membership, so mixing panels could invite one person twice.`,
-        );
-
-      const [{ n: held } = { n: 0 }] = await tx
-        .select({ n: count() })
-        .from(reservedRefs)
-        .where(eq(reservedRefs.cellId, cellId));
-      const room = cell.inviteCap - held;
-      if (room <= 0)
-        throw problem.conflict('cap_reached', `This cell already holds ${held} of its cap of ${cell.inviteCap}`);
-      const want = Math.min(body.count, room);
-
-      const mine = new Set(
-        (
-          await tx.select({ ref: reservedRefs.ref }).from(reservedRefs).where(eq(reservedRefs.projectId, projectId))
-        ).map((r) => r.ref),
-      );
-      const src = this.sourceFor(conn);
-      const ref = projectRef(projectId);
+      const h = await this.prepareHold(tx, projectId, cellId, now);
+      const want = Math.min(body.count, h.room);
       const m = await this.call(() =>
-        src.match({ ...criteria, projectRef: ref, limit: Math.min(5000, want + mine.size) }),
+        this.sourceFor(h.conn).match({
+          ...h.criteria,
+          projectRef: projectRef(projectId),
+          limit: Math.min(5000, want + h.mine.size),
+        }),
       );
-      const picked = m.members.filter((x) => !mine.has(x.ref)).slice(0, want);
+      const picked = m.members.filter((x) => !h.mine.has(x.ref)).slice(0, want);
       if (!picked.length)
         throw problem.conflict(
           'no_audience',
@@ -180,91 +286,32 @@ export class AudienceService {
             ? `Fewer than ${m.minimumCellSize} eligible people match; MADP returns no references`
             : 'Everyone eligible is already held for this project',
         );
-
-      const selectionId = randomUUID();
-      const expiresAt = new Date(now.getTime() + body.expiresInDays * DAY);
-      const r = await this.call(() =>
-        src.reserve(
-          { projectRef: ref, refs: picked.map((x) => x.ref), expiresAt: expiresAt.toISOString() },
-          `s360-${selectionId}`,
-        ),
-      );
-      const refused = new Set(r.refused.map((x) => x.ref));
-      const keep = picked.filter((x) => !refused.has(x.ref));
-
-      await tx.insert(audienceSelections).values({
-        id: selectionId,
-        tenantId: ctx.tenantId,
-        projectId,
-        cellId,
-        connectionId: conn.id,
-        dataMode: m.dataMode,
-        criteria,
-        eligible: m.eligible,
-        returned: m.returned,
-        excluded: m.excluded,
-        refs: picked.map((x) => x.ref),
-        createdBy: ctx.userId,
-      });
-      const [res] = await tx
-        .insert(reservations)
-        .values({
-          tenantId: ctx.tenantId,
-          projectId,
-          cellId,
-          selectionId,
-          connectionId: conn.id,
-          externalId: r.reservationId,
+      const r = await this.hold(
+        tx,
+        ctx,
+        h,
+        picked,
+        {
           requested: want,
-          held: keep.length,
-          refused: r.refused,
-          expiresAt: new Date(r.expiresAt),
-          createdBy: ctx.userId,
-        })
-        .returning();
-      if (keep.length)
-        await tx
-          .insert(reservedRefs)
-          .values(
-            keep.map((x) => ({
-              tenantId: ctx.tenantId,
-              projectId,
-              cellId,
-              reservationId: res!.id,
-              ref: x.ref,
-              panel: x.panel,
-              expiresAt: new Date(r.expiresAt),
-            })),
-          )
-          .onConflictDoNothing();
-      await this.audit.write(tx, actorOf(ctx), {
-        action: 'audience.reserved',
-        targetType: 'quota_cell',
-        targetId: cellId,
-        details: {
-          projectId,
-          reservationId: res!.id,
-          madpReservationId: r.reservationId,
-          requested: body.count,
-          held: keep.length,
-          refused: r.refused.length,
-          eligible: m.eligible,
+          expiresInDays: body.expiresInDays,
+          origin: 'match',
+          criteria: h.criteria,
           dataMode: m.dataMode,
+          eligible: m.eligible,
+          returned: m.returned,
+          excluded: m.excluded,
         },
-      });
+        now,
+      );
       return {
-        reservationId: res!.id,
-        selectionId,
+        ...r,
         requested: body.count,
         cappedTo: want,
-        held: keep.length,
-        refused: r.refused,
         eligible: m.eligible,
         excluded: m.excluded,
         dataMode: m.dataMode,
-        expiresAt: r.expiresAt,
-        cellHeld: held + keep.length,
-        cap: cell.inviteCap,
+        cellHeld: h.held + r.held,
+        cap: h.cell.inviteCap,
       };
     });
   }

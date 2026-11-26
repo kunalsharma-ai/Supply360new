@@ -21,7 +21,7 @@ import {
   type Tx,
 } from '@s360/db';
 import { createHash } from 'node:crypto';
-import { and, asc, count, desc, eq, gt, gte, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm';
+import { type SQL, and, asc, count, desc, eq, gt, gte, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm';
 import { actorOf, AuditService, type Actor } from '../audit/audit.service.js';
 import type { RequestContext } from '../common/context.js';
 import { problem } from '../common/problem.js';
@@ -62,6 +62,9 @@ export const REASON_TEXT: Record<string, string> = {
   madp_rejected: 'MADP refused the request',
   project_closed: 'The project is closed',
   cell_closed: 'The quota cell is closed',
+  deadline_passed: 'The field end date has passed',
+  cell_target_reached: 'The quota cell has all the completes it needs',
+  market_target_reached: "Supply360's target in this market is reached",
   no_people_held: 'Nobody held for this cell is left to invite',
   delivery_unavailable: 'MADP cannot deliver invitations yet; nothing was sent',
   policy_missing: 'The project has no execution policy',
@@ -140,12 +143,12 @@ export class ExecutionService {
     return { halted: !!c?.halted, reason: c?.reason ?? null };
   }
 
-  private async policyOf(tx: Tx, projectId: string) {
+  async policyOf(tx: Tx, projectId: string) {
     const [p] = await tx.select().from(executionPolicies).where(eq(executionPolicies.projectId, projectId));
     return p ?? null;
   }
 
-  private async sentToday(tx: Tx, projectId: string, policy: Policy, now: Date) {
+  async sentToday(tx: Tx, projectId: string, policy: Policy, now: Date) {
     const { midnight } = localParts(policy.timezone, now);
     const [{ n } = { n: 0 }] = await tx
       .select({ n: count() })
@@ -196,21 +199,42 @@ export class ExecutionService {
     return n;
   }
 
+  /** Supply360 completes (one per invitation, from verified outcomes) matching a condition. */
+  private async completes(tx: Tx, where: SQL): Promise<number> {
+    const [{ n } = { n: 0 }] = await tx
+      .select({ n: count() })
+      .from(invitations)
+      .where(and(where, eq(invitations.outcome, 'complete')));
+    return n;
+  }
+
   /**
    * The checks run right before anything is sent for a project and cell. Returns null when sending may go ahead,
    * or the reason it may not.
    */
-  private async gate(tx: Tx, p: Project, cell: Cell, policy: Policy | null, now: Date): Promise<string | null> {
+  async gate(tx: Tx, p: Project, cell: Cell, policy: Policy | null, now: Date): Promise<string | null> {
     if ((await this.halted(tx)).halted) return 'halted';
     if (!policy) return 'policy_missing';
     if (p.lifecycle === 'closed') return 'project_closed';
     if (!dispatchAllowed(p)) return 'project_not_live';
     if (cell.removed || !cell.isOpen) return 'cell_closed';
+    if (p.fieldEndAt && p.fieldEndAt <= now) return 'deadline_passed';
+    if (cell.allocationTarget && (await this.completes(tx, eq(invitations.cellId, cell.id))) >= cell.allocationTarget)
+      return 'cell_target_reached';
     const [m] = await tx
       .select()
       .from(projectMarkets)
       .where(and(eq(projectMarkets.projectId, p.id), eq(projectMarkets.countryCode, cell.countryCode)));
     if (!m || !marketDispatchAllowed(p, m)) return 'market_not_dispatchable';
+    const marketTarget = m.vendorTarget ?? 0;
+    if (
+      marketTarget > 0 &&
+      (await this.completes(
+        tx,
+        and(eq(invitations.projectId, p.id), eq(invitations.countryCode, cell.countryCode))!,
+      )) >= marketTarget
+    )
+      return 'market_target_reached';
     if (inQuietHours(policy, now)) return 'quiet_hours';
     return null;
   }
@@ -241,6 +265,7 @@ export class ExecutionService {
         allowedPanels: body.allowedPanels,
         linkValidDays: body.linkValidDays,
         escalateRefusalPercent: body.escalateRefusalPercent,
+        speederPercent: body.speederPercent ?? null,
         escalatedAt: null,
         escalationReason: null,
         // A saved policy is reviewed at the next scheduler pass, not after the old interval.
@@ -829,16 +854,14 @@ export class ExecutionService {
     });
     if (!work?.rows.length) return 0;
     try {
-      await this.audience
-        .sourceFor(work.conn)
-        .participation(
-          work.rows.map((r) => ({
-            eventId: `s360-click-${r.id}`,
-            invitationId: r.madp,
-            event: 'click',
-            occurredAt: r.at!.toISOString(),
-          })),
-        );
+      await this.audience.sourceFor(work.conn).participation(
+        work.rows.map((r) => ({
+          eventId: `s360-click-${r.id}`,
+          invitationId: r.madp,
+          event: 'click',
+          occurredAt: r.at!.toISOString(),
+        })),
+      );
     } catch (e) {
       this.log.warn(`click report waits: ${(e as Error).message}`);
       return 0;
@@ -1167,6 +1190,7 @@ export const policyView = (p: Policy) => ({
   allowedPanels: p.allowedPanels as string[],
   linkValidDays: p.linkValidDays,
   escalateRefusalPercent: p.escalateRefusalPercent,
+  speederPercent: p.speederPercent,
   escalatedAt: p.escalatedAt?.toISOString() ?? null,
   escalationReason: p.escalationReason,
   version: p.version,

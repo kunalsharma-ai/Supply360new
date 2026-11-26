@@ -91,6 +91,9 @@ DATABASE_ADMIN_URL=postgres://postgres:postgres@localhost:5432/supply360 \
 
 Flags: `--base`, `--users`, `--levels`, `--duration`, `--json`.
 
+After the mix it also runs the click path on its own (Phase 4) and SampTrek's signed S2S callbacks with live
+fieldwork reads (Phase 5).
+
 ## Phase 2: SampTrek project ingestion
 
 - **Sources** (`/sources`, screen _SampTrek Integration_): a connection is FIXTURE (labelled sample projects shaped
@@ -160,3 +163,42 @@ Flags: `--base`, `--users`, `--levels`, `--duration`, `--json`.
   automatic planning, due batches, due reminders and the click outbox.
 - **Emergency stop**: `PUT /execution/kill-switch` (`execution.emergency_stop`) halts all sending and reminders for the
   tenant until lifted.
+
+## Phase 5: participation, live fieldwork, quality, reconciliation, rewards, recontact and reinvite
+
+- **Outcomes only from verified sources.** SampTrek's vendor S2S callback (`GET /api/v1/s2s/samptrek/{tenant}/{connection}?uid={uid}&status={status}`,
+  shown on the source as its callback URL template) is verified with the vendor callback secret: hex HMAC-SHA256 of
+  `{X-Projexa-Timestamp}.{full URL}.{body}`, within 5 minutes. A LIVE connection needs SampTrek's secret pasted in
+  (`PUT /sources/{id}/callback-secret`); a bad signature is a 401 and counted on the connection. SampTrek's sessions API
+  (`GET /projects/{ref}/sessions`, scope `sessions:read`) is the source of record at reconciliation. A click is never a
+  start, and an outcome never invents a start time. Revenue and payout in sessions are dropped.
+- **Participation events** (`/participation`) are append-only, one per dedupe key, applied under the invitation row
+  lock: retries, replays and two sources reporting the same thing never count twice, in any order. The first final
+  outcome sticks; a partial gives way to a final one; a disagreeing callback only raises a flag, while the sessions API
+  overrides and flags. Outcomes and starts go to MADP through an outbox (`participation/events`, stable event ids), and
+  any outcome cancels pending reminders.
+- **Send stops**: the send-time checks now also stop at the field end date, when a cell has its allocation of
+  completes, and when Supply360's vendor target in a market is reached.
+- **Live, IR and LOI** (`/live`, `/ir`, `/loi`): funnel, outcomes, per-market and per-cell progress. Incidence is
+  completes ÷ (completes + terminates), with quota fulls and security outcomes shown beside it. LOI uses only start
+  times a source reported.
+- **Quality** (`/quality`): speeders (under the policy's `speederPercent` of the expected LOI), disagreeing sources,
+  SampTrek duplicate or security outcomes, and client decisions on non-completes are flagged for a person to accept or
+  dismiss with a reason. A flag never rejects anyone.
+- **Reconciliation** (`/reconciliation`): pulls the project's sessions, fills what callbacks missed, applies the
+  client's final approve or reject, and stores the differences (unverified at source, mismatches, missing at source,
+  unknown respondents). Idempotent; the scheduler also reconciles live projects every `RECONCILE_MINUTES` (default 30).
+- **Rewards** (`/rewards`): one reward event per client-approved complete, idempotency key `s360-reward-{invitation}`.
+  FIXTURE MADP acknowledges it and credits nothing. LIVE answers "unavailable": MADP has no reward endpoint, and
+  Supply360 never credits a wallet.
+- **Recontact** (`/invitations/recontact`): find people who took part before by when (a week, a month, a year back or a
+  custom range), earlier project, outcome, client approval and market, then pick them one by one or select everyone
+  matching, and hold them for a quota cell of another project through MADP (`origin = recontact`). Only people on the
+  cell's panel and in its market qualify, never anyone already invited to the project, never past the cell's cap. They
+  are then invited by that project's mode, so automatic mode mails them within its limits.
+- **Reinvite**: people who did not finish (never opened, never started, started without an outcome, partial, technical
+  error) can be picked or selected by kind and sent their same link again. Every reinvite rechecks the emergency stop,
+  the project, cell, quiet hours, the daily maximum and MADP consent; each person at most 3 times, a day apart. Final
+  outcomes are never reinvited. MADP still has no send endpoint, so LIVE reinvites stop safely as unavailable.
+- **FIXTURE simulators** (outside production): play a respondent (opens their link through the real router, then a
+  signed callback through the real verification path) and play the client approving or rejecting completes.

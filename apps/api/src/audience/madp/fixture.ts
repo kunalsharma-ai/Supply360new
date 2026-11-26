@@ -1,7 +1,15 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { AudienceCriteria, PanelCode } from '@s360/contracts';
 import { AudienceError, type AudienceSource } from './source.js';
-import type { MdAttributes, MdAuthorize, MdConsent, MdCounts, MdMatch, MdParticipation, MdReservation } from './types.js';
+import type {
+  MdAttributes,
+  MdAuthorize,
+  MdConsent,
+  MdCounts,
+  MdMatch,
+  MdParticipation,
+  MdReservation,
+} from './types.js';
 
 /**
  * FIXTURE mode: a labelled DEMO population answering exactly like MADP's service API, used until MADP issues
@@ -175,7 +183,14 @@ const storeFor = (connectionId: string) => {
   if (!s)
     stores.set(
       connectionId,
-      (s = { holds: new Map(), idem: new Map(), authIdem: new Map(), invitations: new Map(), withdrawn: new Set(), events: new Map() }),
+      (s = {
+        holds: new Map(),
+        idem: new Map(),
+        authIdem: new Map(),
+        invitations: new Map(),
+        withdrawn: new Set(),
+        events: new Map(),
+      }),
     );
   return s;
 };

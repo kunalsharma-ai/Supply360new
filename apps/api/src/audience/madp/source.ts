@@ -1,5 +1,13 @@
 import type { AudienceCriteria } from '@s360/contracts';
-import type { MdAttributes, MdAuthorize, MdConsent, MdCounts, MdMatch, MdParticipation, MdReservation } from './types.js';
+import type {
+  MdAttributes,
+  MdAuthorize,
+  MdConsent,
+  MdCounts,
+  MdMatch,
+  MdParticipation,
+  MdReservation,
+} from './types.js';
 
 /** MADP's Supply360 service API, in FIXTURE (labelled DEMO population) or LIVE (signed HTTP) mode. */
 export interface AudienceSource {

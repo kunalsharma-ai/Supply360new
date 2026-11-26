@@ -26,7 +26,7 @@ export interface ModuleDef {
 }
 
 /** The last delivered phase. Phases up to and including it show as done on the status pages. */
-export const CURRENT_PHASE = 4;
+export const CURRENT_PHASE = 5;
 
 export const MODULES: ModuleDef[] = [
   {
@@ -178,7 +178,7 @@ export const MODULES: ModuleDef[] = [
     phase: 4,
     ready: true,
     permission: 'projects.read',
-    summary: 'Bounded batches through MADP delivery.',
+    summary: 'Bounded batches through MADP delivery, recontact of past participants and reinvites of dropouts.',
   },
   {
     n: 15,
@@ -220,6 +220,7 @@ export const MODULES: ModuleDef[] = [
     group: 'Fieldwork',
     href: '/participation',
     phase: 5,
+    ready: true,
     permission: 'projects.read',
     summary: 'Append-only participation events and derived states.',
   },
@@ -241,6 +242,7 @@ export const MODULES: ModuleDef[] = [
     group: 'Fieldwork',
     href: '/live',
     phase: 5,
+    ready: true,
     permission: 'projects.read',
     summary: 'Funnel, pending sessions and quota progress, live.',
   },
@@ -251,6 +253,7 @@ export const MODULES: ModuleDef[] = [
     group: 'Fieldwork',
     href: '/ir',
     phase: 5,
+    ready: true,
     permission: 'projects.read',
     summary: 'Actual incidence with defined denominators.',
   },
@@ -261,6 +264,7 @@ export const MODULES: ModuleDef[] = [
     group: 'Fieldwork',
     href: '/loi',
     phase: 5,
+    ready: true,
     permission: 'projects.read',
     summary: 'Actual length of interview distributions.',
   },
@@ -271,6 +275,7 @@ export const MODULES: ModuleDef[] = [
     group: 'Fieldwork',
     href: '/quality',
     phase: 5,
+    ready: true,
     permission: 'quality.review',
     summary: 'Contextual, reviewable quality flags.',
   },
@@ -312,6 +317,7 @@ export const MODULES: ModuleDef[] = [
     group: 'Close-out',
     href: '/reconciliation',
     phase: 5,
+    ready: true,
     permission: 'reconciliation.manage',
     summary: 'Final client-approved and rejected statuses from source.',
   },
@@ -322,6 +328,7 @@ export const MODULES: ModuleDef[] = [
     group: 'Close-out',
     href: '/rewards',
     phase: 5,
+    ready: true,
     permission: 'rewards.sync',
     summary: 'Idempotent eligible reward events to MADP. Never credits wallets.',
   },

@@ -93,3 +93,42 @@ export const StQuotas = z.looseObject({
   ),
 });
 export type StQuotas = z.infer<typeof StQuotas>;
+
+/** One respondent session from `GET /projects/{ref}/sessions`. Revenue, payout, device and geo are never kept. */
+export const StSession = z.looseObject({
+  id: z.string().min(1),
+  status,
+  approval: z
+    .string()
+    .regex(/^[A-Z_]+$/)
+    .nullable()
+    .optional(),
+  outcomeVerified: z.boolean().nullable().optional(),
+  vendorRespondentId: z.string().nullable().optional(),
+  startedAt: iso.nullable().optional(),
+  outcomeAt: iso.nullable().optional(),
+  countryCode: z.string().optional(),
+  vendor: z.looseObject({ code: z.string().nullable().optional() }).nullable().optional(),
+});
+export type StSession = z.infer<typeof StSession>;
+/** What Supply360 keeps of a session: identifiers, status, approval and times only. */
+export interface SourceSession {
+  id: string;
+  status: string;
+  approval: string | null;
+  verified: boolean;
+  uid: string | null;
+  startedAt: string | null;
+  outcomeAt: string | null;
+  countryCode: string | null;
+}
+export const toSourceSession = (s: StSession): SourceSession => ({
+  id: s.id,
+  status: s.status,
+  approval: s.approval ?? null,
+  verified: !!s.outcomeVerified,
+  uid: s.vendorRespondentId ?? null,
+  startedAt: s.startedAt ?? null,
+  outcomeAt: s.outcomeAt ?? null,
+  countryCode: s.countryCode ?? null,
+});

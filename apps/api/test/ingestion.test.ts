@@ -88,15 +88,15 @@ describe('source connections', () => {
 describe('backfill and polling', () => {
   it('imports every FIXTURE project once, with the source status deciding the starting state', async () => {
     const r = await admin.post(`/api/v1/sources/${source.id}/sync`).set(csrf).send({ full: true });
-    expect(r.body).toMatchObject({ ok: true, seen: 3, created: 3 });
+    expect(r.body).toMatchObject({ ok: true, seen: 4, created: 4 });
     expect((await projectBy('PRX10001')).lifecycle).toBe('imported');
     expect((await projectBy('PRX10003')).lifecycle).toBe('source_hold');
   });
   it('a second run changes nothing and makes no new versions', async () => {
     const r = await admin.post(`/api/v1/sources/${source.id}/sync`).set(csrf).send({ full: true });
-    expect(r.body).toMatchObject({ ok: true, created: 0, updated: 0, unchanged: 3 });
+    expect(r.body).toMatchObject({ ok: true, created: 0, updated: 0, unchanged: 4 });
     const [v] = await db<{ n: string }>('select count(*) n from project_versions');
-    expect(Number(v!.n)).toBe(3);
+    expect(Number(v!.n)).toBe(4);
   });
   it('a content change at the source becomes version 2; progress alone does not', async () => {
     const p = fixtureStore(source.id).find((x) => x.projectCode === 'PRX10002')!;
