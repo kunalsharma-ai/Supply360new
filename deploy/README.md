@@ -10,8 +10,10 @@
   callbacks, respondent links `/api/v1/i/...` and `/api/v1/r/...`); every other path goes to the web app.
   `/api/v1/metrics` answers 404 here; Prometheus scrapes `http://api:4000/api/v1/metrics` on the `supply` network.
 - **No container publishes a port.** Nothing is reachable from the host or the internet except through publicweb.
-- **supply** is the private network between the containers. It is an ordinary bridge rather than `internal: true`
-  because the API has to reach SampTrek and MADP.
+- **supply** is the internal network between the containers (`internal: true`), so it has no route to the host
+  or the internet. Postgres, migrate and web are only on this network.
+- **supply-egress** is an outbound-only network that only the API joins, because it has to call SampTrek, MADP,
+  SampIntel and SMTP. No port is published on it.
 - **publicweb** is external and managed separately. Only supply-360 joins it. Point the edge proxy at
   `http://supply-360:80`, have it terminate TLS and send `X-Forwarded-Proto: https`. With Traefik, add these labels
   to the `proxy` service or define the router in Traefik's own dynamic config:

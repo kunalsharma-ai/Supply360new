@@ -2,7 +2,10 @@
 #
 # - supply-360 is an NGINX reverse proxy and the only way in. It routes /api/ to the API and everything else to the
 #   web app, by path.
-# - No container publishes a port. Containers talk to each other over the private `supply` network.
+# - No container publishes a port. Containers talk to each other over the internal `supply` network
+#   (`internal: true`, so it has no route to the internet).
+# - Only the API also joins `egress`, a separate outbound-only network, because it must call SampTrek, MADP,
+#   SampIntel and SMTP. Postgres, migrate and web have no internet access at all.
 # - supply-360 also joins `publicweb`, an external network managed separately (Traefik, or an NGINX with a web
 #   interface). That proxy terminates TLS and forwards to http://supply-360:80.
 #
@@ -44,7 +47,7 @@ services:
       DATABASE_ADMIN_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/supply360
       # Traefik and supply-360 both append to X-Forwarded-For.
       TRUST_PROXY_HOPS: '2'
-    networks: [supply]
+    networks: [supply, egress]
     healthcheck:
       test: ['CMD', 'node', '-e', "fetch('http://localhost:4000/api/v1/health/ready').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
       interval: 10s
@@ -83,10 +86,14 @@ services:
       web: { condition: service_healthy }
 
 networks:
-  # Private network for container-to-container traffic. Nothing on it is published to the host. It is a normal
-  # bridge (not `internal: true`) because the API must reach SampTrek and MADP over the internet.
+  # Internal network for container-to-container traffic. No route to the host or the internet.
   supply:
     name: supply
+    internal: true
+  # Outbound-only network for the API's calls to SampTrek, MADP, SampIntel and SMTP. Nothing listens on it and
+  # no port is published, so nothing can reach the API through it.
+  egress:
+    name: supply-egress
   # Shared with Traefik or the separately managed NGINX. Only supply-360 joins it.
   publicweb:
     name: publicweb
